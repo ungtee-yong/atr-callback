@@ -1,6 +1,14 @@
 (function () {
   'use strict';
 
+  var reasonLabels = {
+    followup: 'Follow-up',
+    billing: 'Billing Question',
+    escalation: 'Escalation',
+    technical: 'Technical Support',
+    other: 'Other'
+  };
+
   var callbacks = [
     {
       id: 150,
@@ -15,6 +23,7 @@
       conversation: '-',
       kpi: 'N/A',
       notes: {
+        code: '',
         tag: '',
         text: 'Available after call completion'
       },
@@ -34,6 +43,7 @@
       conversation: '00:01:43',
       kpi: '06:06:17',
       notes: {
+        code: 'followup',
         tag: 'Follow-up',
         text: 'Follow-up required next week'
       },
@@ -53,6 +63,7 @@
       conversation: '00:09:55',
       kpi: '19:18:32',
       notes: {
+        code: 'billing',
         tag: 'Billing Question',
         text: 'Customer not available at this time'
       },
@@ -72,6 +83,7 @@
       conversation: '00:08:56',
       kpi: '05:40:14',
       notes: {
+        code: 'billing',
         tag: 'Billing Question',
         text: 'Billing inquiry about monthly charges'
       },
@@ -91,6 +103,7 @@
       conversation: '-',
       kpi: '06:33:39',
       notes: {
+        code: '',
         tag: '',
         text: 'Click to add reason & notes'
       },
@@ -110,6 +123,7 @@
       conversation: '-',
       kpi: 'N/A',
       notes: {
+        code: '',
         tag: '',
         text: 'Available after call completion'
       },
@@ -129,6 +143,7 @@
       conversation: '-',
       kpi: 'N/A',
       notes: {
+        code: '',
         tag: '',
         text: 'Available after call completion'
       },
@@ -148,6 +163,7 @@
       conversation: '00:04:20',
       kpi: '04:55:10',
       notes: {
+        code: 'escalation',
         tag: 'Escalation',
         text: 'Transferred to supervisor for resolution'
       },
@@ -156,19 +172,75 @@
     }
   ];
 
+  var noteModal = null;
+  var noteBackdrop = null;
+  var noteForm = null;
+  var noteReason = null;
+  var noteText = null;
+  var noteCounter = null;
+  var noteError = null;
+  var tableBody = null;
+  var currentNoteId = null;
+  var isModalVisible = false;
+
+  function initializeApp() {
+    cacheElements();
+    bindEvents();
+    renderCallbacks();
+  }
+
+  function cacheElements() {
+    tableBody = document.getElementById('callbacks-body');
+    noteModal = document.getElementById('note-modal');
+    noteBackdrop = document.getElementById('note-backdrop');
+    noteForm = document.getElementById('note-form');
+    noteReason = document.getElementById('note-reason');
+    noteText = document.getElementById('note-text');
+    noteCounter = document.getElementById('note-counter');
+    noteError = document.getElementById('note-error');
+  }
+
+  function bindEvents() {
+    if (tableBody) {
+      addEvent(tableBody, 'click', handleTableClick);
+    }
+
+    if (noteForm) {
+      addEvent(noteForm, 'submit', handleNoteSubmit);
+    }
+
+    var cancelButton = document.getElementById('note-cancel');
+    if (cancelButton) {
+      addEvent(cancelButton, 'click', closeModal);
+    }
+
+    if (noteBackdrop) {
+      addEvent(noteBackdrop, 'click', closeModal);
+    }
+
+    if (noteReason) {
+      addEvent(noteReason, 'change', clearNoteError);
+    }
+
+    if (noteText) {
+      addEvent(noteText, 'keyup', handleNoteInput);
+      addEvent(noteText, 'input', handleNoteInput);
+    }
+
+    addEvent(window, 'keydown', handleKeyDown);
+  }
+
   function renderCallbacks() {
-    var body = document.getElementById('callbacks-body');
-    if (!body) {
+    if (!tableBody) {
       return;
     }
 
     var rowsHtml = '';
     for (var i = 0; i < callbacks.length; i += 1) {
-      var item = callbacks[i];
-      rowsHtml += buildRow(item);
+      rowsHtml += buildRow(callbacks[i]);
     }
 
-    body.innerHTML = rowsHtml;
+    tableBody.innerHTML = rowsHtml;
 
     var range = document.getElementById('results-range');
     if (range) {
@@ -190,7 +262,7 @@
       '<td>' + item.callbackTime + '</td>' +
       '<td>' + item.conversation + '</td>' +
       '<td>' + item.kpi + '</td>' +
-      '<td>' + buildNotes(item.notes) + '</td>' +
+      '<td class="note-cell" data-note-id="' + item.id + '">' + buildNotes(item.notes) + '</td>' +
       '<td>' + buildCallStatus(item.callStatus) + '</td>' +
       '<td>' + buildAction(item.action) + '</td>' +
       '</tr>'
@@ -240,6 +312,199 @@
     return '<button class="action-call" type="button">' + action.text + '</button>';
   }
 
+  function handleTableClick(event) {
+    event = event || window.event;
+    var target = event.target || event.srcElement;
+
+    while (target && target !== tableBody && target.tagName !== 'TD') {
+      target = target.parentNode;
+    }
+
+    if (!target || target === tableBody) {
+      return;
+    }
+
+    if (!isNoteCell(target)) {
+      return;
+    }
+
+    var idValue = target.getAttribute('data-note-id');
+    if (!idValue) {
+      return;
+    }
+
+    var numericId = parseInt(idValue, 10);
+    if (isNaN(numericId)) {
+      return;
+    }
+
+    openModal(findCallbackById(numericId));
+  }
+
+  function isNoteCell(node) {
+    var className = node.className || '';
+    return className.indexOf('note-cell') !== -1;
+  }
+
+  function findCallbackById(id) {
+    for (var i = 0; i < callbacks.length; i += 1) {
+      if (callbacks[i].id === id) {
+        return callbacks[i];
+      }
+    }
+    return null;
+  }
+
+  function openModal(item) {
+    if (!item || !noteModal || !noteBackdrop) {
+      return;
+    }
+
+    currentNoteId = item.id;
+
+    var code = '';
+    if (item.notes) {
+      code = item.notes.code || getReasonValueFromTag(item.notes.tag || '');
+    }
+
+    if (noteReason) {
+      noteReason.value = code || '';
+    }
+
+    if (noteText) {
+      noteText.value = item.notes && item.notes.text ? item.notes.text : '';
+    }
+
+    clearNoteError();
+    updateNoteCounter();
+
+    removeClass(noteModal, 'hidden');
+    removeClass(noteBackdrop, 'hidden');
+    isModalVisible = true;
+
+    if (noteReason && noteReason.focus) {
+      noteReason.focus();
+    }
+  }
+
+  function closeModal(event) {
+    if (event && event.preventDefault) {
+      event.preventDefault();
+    } else if (event) {
+      event.returnValue = false;
+    }
+
+    if (!noteModal || !noteBackdrop) {
+      return;
+    }
+
+    addClass(noteModal, 'hidden');
+    addClass(noteBackdrop, 'hidden');
+    isModalVisible = false;
+    currentNoteId = null;
+
+    if (noteForm && noteForm.reset) {
+      noteForm.reset();
+    }
+
+    clearNoteError();
+    updateNoteCounter();
+  }
+
+  function handleNoteSubmit(event) {
+    event = preventDefault(event);
+
+    if (currentNoteId === null) {
+      closeModal();
+      return false;
+    }
+
+    var reasonValue = noteReason ? noteReason.value : '';
+    var textValue = noteText ? noteText.value : '';
+    var trimmedText = trimValue(textValue);
+
+    if (!reasonValue) {
+      setNoteError('Please select a reason.');
+      if (noteReason && noteReason.focus) {
+        noteReason.focus();
+      }
+      return false;
+    }
+
+    if (!trimmedText) {
+      setNoteError('Please enter notes (up to 250 characters).');
+      if (noteText && noteText.focus) {
+        noteText.focus();
+      }
+      return false;
+    }
+
+    var label = getReasonLabel(reasonValue);
+    updateCallbackNotes(currentNoteId, reasonValue, label, trimmedText);
+
+    closeModal();
+    renderCallbacks();
+    return false;
+  }
+
+  function updateCallbackNotes(id, code, label, text) {
+    for (var i = 0; i < callbacks.length; i += 1) {
+      if (callbacks[i].id === id) {
+        callbacks[i].notes = callbacks[i].notes || {};
+        callbacks[i].notes.code = code;
+        callbacks[i].notes.tag = label;
+        callbacks[i].notes.text = text;
+        break;
+      }
+    }
+  }
+
+  function getReasonLabel(value) {
+    return reasonLabels[value] || '';
+  }
+
+  function getReasonValueFromTag(tag) {
+    for (var key in reasonLabels) {
+      if (reasonLabels.hasOwnProperty(key) && reasonLabels[key] === tag) {
+        return key;
+      }
+    }
+    return '';
+  }
+
+  function handleNoteInput() {
+    clearNoteError();
+    updateNoteCounter();
+  }
+
+  function updateNoteCounter() {
+    if (!noteCounter) {
+      return;
+    }
+    var count = 0;
+    if (noteText && typeof noteText.value === 'string') {
+      count = noteText.value.length;
+    }
+    noteCounter.innerHTML = count + ' / 250';
+  }
+
+  function setNoteError(message) {
+    if (noteError) {
+      noteError.innerHTML = message;
+    }
+  }
+
+  function clearNoteError() {
+    setNoteError('');
+  }
+
+  function handleKeyDown(event) {
+    event = event || window.event;
+    if (event.keyCode === 27 && isModalVisible) {
+      closeModal(event);
+    }
+  }
+
   function formatPhone(phone) {
     if (!phone) {
       return '-';
@@ -251,9 +516,55 @@
     return phone;
   }
 
+  function addEvent(element, type, handler) {
+    if (!element) {
+      return;
+    }
+    if (element.addEventListener) {
+      element.addEventListener(type, handler, false);
+    } else if (element.attachEvent) {
+      element.attachEvent('on' + type, handler);
+    }
+  }
+
+  function removeClass(element, className) {
+    if (!element || !className) {
+      return;
+    }
+    var pattern = new RegExp('(^|\\s)' + className + '(\\s|$)', 'g');
+    element.className = (element.className || '').replace(pattern, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+  }
+
+  function addClass(element, className) {
+    if (!element || !className) {
+      return;
+    }
+    var current = element.className || '';
+    if (current.indexOf(className) === -1) {
+      element.className = current ? current + ' ' + className : className;
+    }
+  }
+
+  function trimValue(value) {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return String(value).replace(/^\s+|\s+$/g, '');
+  }
+
+  function preventDefault(event) {
+    event = event || window.event;
+    if (event.preventDefault) {
+      event.preventDefault();
+    } else {
+      event.returnValue = false;
+    }
+    return event;
+  }
+
   if (window.attachEvent) {
-    window.attachEvent('onload', renderCallbacks);
+    window.attachEvent('onload', initializeApp);
   } else {
-    window.addEventListener('DOMContentLoaded', renderCallbacks, false);
+    window.addEventListener('DOMContentLoaded', initializeApp, false);
   }
 })();

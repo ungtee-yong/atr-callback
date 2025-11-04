@@ -96,6 +96,47 @@
             <tbody id="callbacks-body"></tbody>
           </table>
         </section>
+
+        <div id="note-backdrop" class="modal-backdrop hidden"></div>
+        <div
+          id="note-modal"
+          class="modal hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="note-modal-title"
+        >
+          <div class="modal-content">
+            <h2 id="note-modal-title">Update Reason &amp; Notes</h2>
+            <form id="note-form">
+              <label class="modal-label" for="note-reason">Reason</label>
+              <select id="note-reason" name="note-reason" class="modal-input">
+                <option value="">Select a reason</option>
+                <option value="followup">Follow-up</option>
+                <option value="billing">Billing Question</option>
+                <option value="escalation">Escalation</option>
+                <option value="technical">Technical Support</option>
+                <option value="other">Other</option>
+              </select>
+              <div id="note-error" class="modal-error"></div>
+
+              <label class="modal-label" for="note-text">Notes</label>
+              <textarea
+                id="note-text"
+                name="note-text"
+                class="modal-textarea"
+                maxlength="250"
+                rows="4"
+                placeholder="Add up to 250 characters"
+              ></textarea>
+              <div class="char-counter" id="note-counter">0 / 250</div>
+
+              <div class="modal-actions">
+                <button type="button" id="note-cancel" class="modal-button secondary">Cancel</button>
+                <button type="submit" id="note-save" class="modal-button primary">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
       </main>
     </div>
 
