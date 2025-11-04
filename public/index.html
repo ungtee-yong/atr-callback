@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Callback List</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-nav">
+        <div class="brand">
+          <div class="brand-logo">V</div>
+          <span class="brand-name">Voxtron</span>
+        </div>
+        <nav class="main-nav" aria-label="primary">
+          <button class="tab-button active">Callback List <span class="badge">24</span></button>
+          <button class="tab-button">Reports</button>
+          <button class="tab-button">Analytics</button>
+          <button class="tab-button">Profile</button>
+          <button class="tab-button">Settings</button>
+        </nav>
+        <div class="user-status">
+          <span class="status-dot online"></span>
+          <span class="status-text">Connected</span>
+          <div class="user-chip">
+            <span class="user-initials">JD</span>
+            <div class="user-meta">
+              <span class="user-name">John Doe</span>
+              <span class="user-role">Agent-001</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page">
+        <div class="page-head">
+          <div class="page-title">
+            <div class="icon-circle">
+              <span class="phone-icon">☎</span>
+            </div>
+            <div>
+              <h1>Callback List</h1>
+              <p>Manage and track customer callback requests with real-time status updates</p>
+            </div>
+          </div>
+          <div class="status-pills">
+            <span class="pill waiting">2 Waiting</span>
+            <span class="pill calling">2 Calling</span>
+          </div>
+        </div>
+
+        <section class="toolbar">
+          <button class="filter-button" type="button">
+            <span class="filter-icon">☰</span>
+            Filters
+          </button>
+          <div class="toolbar-spacer"></div>
+          <div class="pill-group">
+            <span class="pill muted">Skills: 3</span>
+            <span class="pill muted">1</span>
+          </div>
+          <button class="clear-button" type="button">Clear</button>
+        </section>
+
+        <section class="list-meta">
+          <span id="results-range">1-20 of 97 results</span>
+          <div class="pager">
+            <button class="pager-button" type="button">◀</button>
+            <span>1 / 5</span>
+            <button class="pager-button" type="button">▶</button>
+          </div>
+        </section>
+
+        <section class="table-card" aria-live="polite">
+          <table id="callbacks-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Time</th>
+                <th>Phone</th>
+                <th>Last Status</th>
+                <th>Skill</th>
+                <th>Agent</th>
+                <th>Waiting</th>
+                <th>Abandon Time</th>
+                <th>Callback Time</th>
+                <th>Conversation</th>
+                <th>KPI</th>
+                <th>Reason &amp; Notes</th>
+                <th>Call Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="callbacks-body"></tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
