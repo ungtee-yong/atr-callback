@@ -51,8 +51,8 @@
           </div>
         </div>
 
-        <section class="toolbar">
-          <button class="filter-button" type="button">
+          <section class="toolbar">
+            <button class="filter-button" id="open-filter" type="button">
             <span class="filter-icon">☰</span>
             Filters
           </button>
@@ -96,6 +96,171 @@
             <tbody id="callbacks-body"></tbody>
           </table>
         </section>
+
+        <div id="filter-backdrop" class="modal-backdrop hidden"></div>
+        <div
+          id="filter-modal"
+          class="modal hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="filter-modal-title"
+        >
+          <div class="modal-content filter-modal">
+            <h2 id="filter-modal-title">Filters</h2>
+            <form id="filter-form">
+              <section class="filter-section">
+                <h3 class="filter-title">Search</h3>
+                <div class="filter-field">
+                  <label for="filter-phone">Phone</label>
+                  <input
+                    type="text"
+                    id="filter-phone"
+                    class="modal-input"
+                    placeholder="Enter phone number"
+                  />
+                </div>
+                <div class="filter-field">
+                  <label for="filter-reason">Reason &amp; Notes</label>
+                  <input
+                    type="text"
+                    id="filter-reason"
+                    class="modal-input"
+                    placeholder="Search by reason or notes"
+                  />
+                </div>
+              </section>
+
+              <section class="filter-section">
+                <h3 class="filter-title">Time Filter</h3>
+                <div class="filter-field">
+                  <label for="filter-from-date">From</label>
+                  <div class="filter-date-row">
+                    <div class="filter-date-field">
+                      <input
+                        type="text"
+                        id="filter-from-date"
+                        class="modal-input filter-date-input"
+                        placeholder="Select date"
+                        readonly="readonly"
+                      />
+                      <button
+                        type="button"
+                        class="calendar-trigger"
+                        data-target="filter-from-date"
+                      >
+                        Pick
+                      </button>
+                    </div>
+                    <div class="filter-time-field">
+                      <select id="filter-from-hour" class="modal-input filter-time-select">
+                        <option value="">HH</option>
+                      </select>
+                      <span class="time-separator">:</span>
+                      <select id="filter-from-minute" class="modal-input filter-time-select">
+                        <option value="">MM</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="filter-field">
+                  <label for="filter-to-date">To</label>
+                  <div class="filter-date-row">
+                    <div class="filter-date-field">
+                      <input
+                        type="text"
+                        id="filter-to-date"
+                        class="modal-input filter-date-input"
+                        placeholder="Select date"
+                        readonly="readonly"
+                      />
+                      <button
+                        type="button"
+                        class="calendar-trigger"
+                        data-target="filter-to-date"
+                      >
+                        Pick
+                      </button>
+                    </div>
+                    <div class="filter-time-field">
+                      <select id="filter-to-hour" class="modal-input filter-time-select">
+                        <option value="">HH</option>
+                      </select>
+                      <span class="time-separator">:</span>
+                      <select id="filter-to-minute" class="modal-input filter-time-select">
+                        <option value="">MM</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="filter-section">
+                <h3 class="filter-title">Status</h3>
+                <div class="filter-field">
+                  <label for="filter-call-status">Call Status</label>
+                  <select id="filter-call-status" class="modal-input">
+                    <option value="">All call status</option>
+                  </select>
+                </div>
+                <div class="filter-field">
+                  <label for="filter-last-status">Last Status</label>
+                  <select id="filter-last-status" class="modal-input">
+                    <option value="">All last status</option>
+                    <option value="Callback">Callback</option>
+                    <option value="Abandon">Abandon</option>
+                  </select>
+                </div>
+              </section>
+
+              <section class="filter-section">
+                <h3 class="filter-title">Assignment</h3>
+                <div class="filter-field">
+                  <label for="filter-skills-trigger">Skills</label>
+                  <div class="multi-select" id="filter-skills">
+                    <button type="button" id="filter-skills-trigger" class="multi-select-trigger">
+                      All skills
+                    </button>
+                    <div id="filter-skills-panel" class="multi-select-panel hidden"></div>
+                  </div>
+                </div>
+                <div class="filter-field">
+                  <label for="filter-agent">Agent</label>
+                  <select id="filter-agent" class="modal-input">
+                    <option value="">All agents</option>
+                  </select>
+                </div>
+              </section>
+
+              <div class="filter-actions">
+                <button type="button" id="filter-clear" class="modal-button secondary">Reset</button>
+                <button type="submit" class="modal-button primary">Apply</button>
+              </div>
+            </form>
+
+            <div id="filter-calendar" class="calendar hidden" aria-hidden="true">
+              <div class="calendar-header">
+                <button type="button" id="calendar-prev" class="calendar-nav">◀</button>
+                <div id="calendar-label" class="calendar-label"></div>
+                <button type="button" id="calendar-next" class="calendar-nav">▶</button>
+              </div>
+              <table class="calendar-table" role="presentation">
+                <thead>
+                  <tr>
+                    <th>Su</th>
+                    <th>Mo</th>
+                    <th>Tu</th>
+                    <th>We</th>
+                    <th>Th</th>
+                    <th>Fr</th>
+                    <th>Sa</th>
+                  </tr>
+                </thead>
+                <tbody id="calendar-grid"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
         <div id="note-backdrop" class="modal-backdrop hidden"></div>
         <div

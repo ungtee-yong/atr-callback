@@ -172,6 +172,23 @@
     }
   ];
 
+  var currentList = [];
+
+  var activeFilters = {
+    phone: '',
+    reason: '',
+    fromDate: '',
+    fromHour: '',
+    fromMinute: '',
+    toDate: '',
+    toHour: '',
+    toMinute: '',
+    callStatus: '',
+    lastStatus: '',
+    skills: [],
+    agent: ''
+  };
+
   var noteModal = null;
   var noteBackdrop = null;
   var noteForm = null;
@@ -183,10 +200,46 @@
   var currentNoteId = null;
   var isModalVisible = false;
 
+  var filterModal = null;
+  var filterBackdrop = null;
+  var filterForm = null;
+  var filterPhoneInput = null;
+  var filterReasonInput = null;
+  var filterFromDateInput = null;
+  var filterFromHourSelect = null;
+  var filterFromMinuteSelect = null;
+  var filterToDateInput = null;
+  var filterToHourSelect = null;
+  var filterToMinuteSelect = null;
+  var filterCallStatusSelect = null;
+  var filterLastStatusSelect = null;
+  var filterAgentSelect = null;
+  var filterClearButton = null;
+  var filterButton = null;
+
+  var skillTrigger = null;
+  var skillPanel = null;
+  var skillCheckboxes = [];
+  var selectedSkills = [];
+
+  var calendarContainer = null;
+  var calendarLabel = null;
+  var calendarGrid = null;
+  var calendarPrev = null;
+  var calendarNext = null;
+  var calendarTargetInput = null;
+  var calendarMonth = 0;
+  var calendarYear = 0;
+
+  var isFilterModalVisible = false;
+  var isCalendarVisible = false;
+
   function initializeApp() {
     cacheElements();
     bindEvents();
-    renderCallbacks();
+    initializeFilters();
+    currentList = callbacks.slice(0);
+    runFilters();
   }
 
   function cacheElements() {
@@ -198,6 +251,29 @@
     noteText = document.getElementById('note-text');
     noteCounter = document.getElementById('note-counter');
     noteError = document.getElementById('note-error');
+    filterModal = document.getElementById('filter-modal');
+    filterBackdrop = document.getElementById('filter-backdrop');
+    filterForm = document.getElementById('filter-form');
+    filterPhoneInput = document.getElementById('filter-phone');
+    filterReasonInput = document.getElementById('filter-reason');
+    filterFromDateInput = document.getElementById('filter-from-date');
+    filterFromHourSelect = document.getElementById('filter-from-hour');
+    filterFromMinuteSelect = document.getElementById('filter-from-minute');
+    filterToDateInput = document.getElementById('filter-to-date');
+    filterToHourSelect = document.getElementById('filter-to-hour');
+    filterToMinuteSelect = document.getElementById('filter-to-minute');
+    filterCallStatusSelect = document.getElementById('filter-call-status');
+    filterLastStatusSelect = document.getElementById('filter-last-status');
+    filterAgentSelect = document.getElementById('filter-agent');
+    filterClearButton = document.getElementById('filter-clear');
+    filterButton = document.getElementById('open-filter');
+    skillTrigger = document.getElementById('filter-skills-trigger');
+    skillPanel = document.getElementById('filter-skills-panel');
+    calendarContainer = document.getElementById('filter-calendar');
+    calendarLabel = document.getElementById('calendar-label');
+    calendarGrid = document.getElementById('calendar-grid');
+    calendarPrev = document.getElementById('calendar-prev');
+    calendarNext = document.getElementById('calendar-next');
   }
 
   function bindEvents() {
@@ -227,7 +303,40 @@
       addEvent(noteText, 'input', handleNoteInput);
     }
 
+    if (filterForm) {
+      addEvent(filterForm, 'submit', handleFilterSubmit);
+    }
+
+    if (filterClearButton) {
+      addEvent(filterClearButton, 'click', handleFilterClear);
+    }
+
+    if (filterBackdrop) {
+      addEvent(filterBackdrop, 'click', closeFilterModal);
+    }
+
+    if (filterButton) {
+      addEvent(filterButton, 'click', openFilterModal);
+    }
+
+    if (skillTrigger) {
+      addEvent(skillTrigger, 'click', toggleSkillPanel);
+    }
+
+    if (calendarPrev) {
+      addEvent(calendarPrev, 'click', handleCalendarPrev);
+    }
+
+    if (calendarNext) {
+      addEvent(calendarNext, 'click', handleCalendarNext);
+    }
+
+    if (calendarGrid) {
+      addEvent(calendarGrid, 'click', handleCalendarGridClick);
+    }
+
     addEvent(window, 'keydown', handleKeyDown);
+    addEvent(document, 'click', handleDocumentClick);
   }
 
   function renderCallbacks() {
@@ -236,15 +345,19 @@
     }
 
     var rowsHtml = '';
-    for (var i = 0; i < callbacks.length; i += 1) {
-      rowsHtml += buildRow(callbacks[i]);
+    for (var i = 0; i < currentList.length; i += 1) {
+      rowsHtml += buildRow(currentList[i]);
     }
 
     tableBody.innerHTML = rowsHtml;
 
     var range = document.getElementById('results-range');
     if (range) {
-      range.innerHTML = '1-' + callbacks.length + ' of ' + callbacks.length + ' results';
+      if (currentList.length === 0) {
+        range.innerHTML = '0 results';
+      } else {
+        range.innerHTML = '1-' + currentList.length + ' of ' + currentList.length + ' results';
+      }
     }
   }
 
@@ -310,6 +423,686 @@
       return '<button class="action-disabled" type="button" disabled="disabled">' + action.text + '</button>';
     }
     return '<button class="action-call" type="button">' + action.text + '</button>';
+  }
+
+  function initializeFilters() {
+    populateTimeSelect(filterFromHourSelect, 23, 1);
+    populateTimeSelect(filterToHourSelect, 23, 1);
+    populateTimeSelect(filterFromMinuteSelect, 55, 5);
+    populateTimeSelect(filterToMinuteSelect, 55, 5);
+    populateCallStatusOptions();
+    populateAgentOptions();
+    buildSkillOptions(getUniqueSkills());
+    attachCalendarTriggers();
+    populateFilterFormFromState();
+    updateSkillDisplay();
+  }
+
+  function populateTimeSelect(selectElement, maxValue, step) {
+    if (!selectElement) {
+      return;
+    }
+    var existingLength = selectElement.options ? selectElement.options.length : 0;
+    while (existingLength > 1) {
+      selectElement.remove(1);
+      existingLength -= 1;
+    }
+    for (var value = 0; value <= maxValue; value += step) {
+      var option = document.createElement('option');
+      option.value = padNumber(value);
+      option.innerHTML = padNumber(value);
+      selectElement.appendChild(option);
+    }
+  }
+
+  function populateCallStatusOptions() {
+    if (!filterCallStatusSelect) {
+      return;
+    }
+    clearSelectOptions(filterCallStatusSelect);
+    var statuses = getUniqueCallStatuses();
+    for (var i = 0; i < statuses.length; i += 1) {
+      appendOption(filterCallStatusSelect, statuses[i]);
+    }
+  }
+
+  function populateAgentOptions() {
+    if (!filterAgentSelect) {
+      return;
+    }
+    clearSelectOptions(filterAgentSelect);
+    var agents = getUniqueAgents();
+    for (var i = 0; i < agents.length; i += 1) {
+      appendOption(filterAgentSelect, agents[i]);
+    }
+  }
+
+  function clearSelectOptions(selectElement) {
+    if (!selectElement || !selectElement.options) {
+      return;
+    }
+    while (selectElement.options.length > 1) {
+      selectElement.remove(1);
+    }
+  }
+
+  function appendOption(selectElement, value) {
+    if (!selectElement) {
+      return;
+    }
+    var option = document.createElement('option');
+    option.value = value;
+    option.innerHTML = value;
+    selectElement.appendChild(option);
+  }
+
+  function buildSkillOptions(skills) {
+    if (!skillPanel) {
+      return;
+    }
+    skillPanel.innerHTML = '';
+    skillCheckboxes = [];
+    for (var i = 0; i < skills.length; i += 1) {
+      var label = document.createElement('label');
+      label.className = 'multi-select-option';
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = skills[i];
+      checkbox.name = 'filter-skill';
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(skills[i]));
+      skillPanel.appendChild(label);
+      skillCheckboxes.push(checkbox);
+      addEvent(checkbox, 'change', handleSkillChange);
+    }
+  }
+
+  function attachCalendarTriggers() {
+    var triggers = document.getElementsByClassName('calendar-trigger');
+    for (var i = 0; i < triggers.length; i += 1) {
+      addEvent(triggers[i], 'click', handleCalendarTrigger);
+    }
+  }
+
+  function populateFilterFormFromState() {
+    if (filterPhoneInput) {
+      filterPhoneInput.value = activeFilters.phone;
+    }
+    if (filterReasonInput) {
+      filterReasonInput.value = activeFilters.reason;
+    }
+    if (filterFromDateInput) {
+      filterFromDateInput.value = activeFilters.fromDate;
+    }
+    if (filterFromHourSelect) {
+      filterFromHourSelect.value = activeFilters.fromHour;
+    }
+    if (filterFromMinuteSelect) {
+      filterFromMinuteSelect.value = activeFilters.fromMinute;
+    }
+    if (filterToDateInput) {
+      filterToDateInput.value = activeFilters.toDate;
+    }
+    if (filterToHourSelect) {
+      filterToHourSelect.value = activeFilters.toHour;
+    }
+    if (filterToMinuteSelect) {
+      filterToMinuteSelect.value = activeFilters.toMinute;
+    }
+    if (filterCallStatusSelect) {
+      filterCallStatusSelect.value = activeFilters.callStatus;
+    }
+    if (filterLastStatusSelect) {
+      filterLastStatusSelect.value = activeFilters.lastStatus;
+    }
+    if (filterAgentSelect) {
+      filterAgentSelect.value = activeFilters.agent;
+    }
+    selectedSkills = activeFilters.skills.slice(0);
+    syncSkillCheckboxes();
+    updateSkillDisplay();
+  }
+
+  function runFilters() {
+    var phoneFilter = trimValue(activeFilters.phone).replace(/\D/g, '');
+    var reasonFilter = trimValue(activeFilters.reason).toLowerCase();
+    var callFilter = trimValue(activeFilters.callStatus).toLowerCase();
+    var lastFilter = trimValue(activeFilters.lastStatus).toLowerCase();
+    var agentFilter = trimValue(activeFilters.agent).toLowerCase();
+    var skillsFilter = [];
+    var i;
+    for (i = 0; i < activeFilters.skills.length; i += 1) {
+      skillsFilter.push(activeFilters.skills[i].toLowerCase());
+    }
+
+    var fromTimestamp = buildFilterTimestamp(activeFilters.fromDate, activeFilters.fromHour, activeFilters.fromMinute);
+    var toTimestamp = buildFilterTimestamp(activeFilters.toDate, activeFilters.toHour, activeFilters.toMinute);
+    if (toTimestamp !== null) {
+      toTimestamp += 59999;
+    }
+
+    var list = [];
+    for (i = 0; i < callbacks.length; i += 1) {
+      var item = callbacks[i];
+      var include = true;
+      var itemPhone = item.phone ? item.phone.replace(/\D/g, '') : '';
+
+      if (phoneFilter && itemPhone.indexOf(phoneFilter) === -1) {
+        include = false;
+      }
+
+      if (include && reasonFilter) {
+        var tagValue = item.notes && item.notes.tag ? item.notes.tag.toLowerCase() : '';
+        var noteValue = item.notes && item.notes.text ? item.notes.text.toLowerCase() : '';
+        if (tagValue.indexOf(reasonFilter) === -1 && noteValue.indexOf(reasonFilter) === -1) {
+          include = false;
+        }
+      }
+
+      var itemTimestamp = null;
+      if (include && (fromTimestamp !== null || toTimestamp !== null)) {
+        itemTimestamp = parseItemTime(item.time);
+        if (itemTimestamp === null) {
+          include = false;
+        }
+      }
+
+      if (include && fromTimestamp !== null && itemTimestamp < fromTimestamp) {
+        include = false;
+      }
+
+      if (include && toTimestamp !== null && itemTimestamp > toTimestamp) {
+        include = false;
+      }
+
+      if (include && callFilter) {
+        var callStatus = item.callStatus && item.callStatus.text ? item.callStatus.text.toLowerCase() : '';
+        if (callStatus !== callFilter) {
+          include = false;
+        }
+      }
+
+      if (include && lastFilter) {
+        var lastStatus = item.lastStatus && item.lastStatus.text ? item.lastStatus.text.toLowerCase() : '';
+        if (lastStatus !== lastFilter) {
+          include = false;
+        }
+      }
+
+      if (include && skillsFilter.length > 0) {
+        var skillValue = item.skill ? item.skill.toLowerCase() : '';
+        if (indexOfValue(skillsFilter, skillValue) === -1) {
+          include = false;
+        }
+      }
+
+      if (include && agentFilter) {
+        var agentValue = item.agent ? item.agent.toLowerCase() : '';
+        if (agentValue !== agentFilter) {
+          include = false;
+        }
+      }
+
+      if (include) {
+        list.push(item);
+      }
+    }
+
+    currentList = list;
+    renderCallbacks();
+  }
+
+  function buildFilterTimestamp(dateValue, hourValue, minuteValue) {
+    if (!dateValue) {
+      return null;
+    }
+    var parts = dateValue.split('-');
+    if (parts.length !== 3) {
+      return null;
+    }
+    var year = parseInt(parts[0], 10);
+    var month = parseInt(parts[1], 10) - 1;
+    var day = parseInt(parts[2], 10);
+    var hour = parseInt(hourValue, 10);
+    var minute = parseInt(minuteValue, 10);
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return null;
+    }
+    if (isNaN(hour)) {
+      hour = 0;
+    }
+    if (isNaN(minute)) {
+      minute = 0;
+    }
+    var dateObject = new Date(year, month, day, hour, minute, 0);
+    return dateObject.getTime();
+  }
+
+  function parseItemTime(value) {
+    if (!value || value === '-') {
+      return null;
+    }
+    var segments = value.split(' ');
+    if (segments.length === 0) {
+      return null;
+    }
+    var datePart = segments[0];
+    var timePart = segments.length > 1 ? segments[1] : '00:00:00';
+    var dateParts = datePart.split('/');
+    if (dateParts.length !== 3) {
+      return null;
+    }
+    var month = parseInt(dateParts[0], 10) - 1;
+    var day = parseInt(dateParts[1], 10);
+    var year = parseInt(dateParts[2], 10);
+    if (isNaN(month) || isNaN(day) || isNaN(year)) {
+      return null;
+    }
+    var timeParts = timePart.split(':');
+    var hour = timeParts.length > 0 ? parseInt(timeParts[0], 10) : 0;
+    var minute = timeParts.length > 1 ? parseInt(timeParts[1], 10) : 0;
+    var second = timeParts.length > 2 ? parseInt(timeParts[2], 10) : 0;
+    if (isNaN(hour)) {
+      hour = 0;
+    }
+    if (isNaN(minute)) {
+      minute = 0;
+    }
+    if (isNaN(second)) {
+      second = 0;
+    }
+    var dateObject = new Date(year, month, day, hour, minute, second);
+    return dateObject.getTime();
+  }
+
+  function getUniqueCallStatuses() {
+    var lookup = {};
+    var results = [];
+    for (var i = 0; i < callbacks.length; i += 1) {
+      var status = callbacks[i].callStatus && callbacks[i].callStatus.text ? callbacks[i].callStatus.text : '';
+      if (status && !lookup[status]) {
+        lookup[status] = true;
+        results.push(status);
+      }
+    }
+    return results;
+  }
+
+  function getUniqueAgents() {
+    var lookup = {};
+    var results = [];
+    for (var i = 0; i < callbacks.length; i += 1) {
+      var agent = callbacks[i].agent || '';
+      if (agent && !lookup[agent]) {
+        lookup[agent] = true;
+        results.push(agent);
+      }
+    }
+    return results;
+  }
+
+  function getUniqueSkills() {
+    var lookup = {};
+    var results = [];
+    for (var i = 0; i < callbacks.length; i += 1) {
+      var skill = callbacks[i].skill || '';
+      if (skill && !lookup[skill]) {
+        lookup[skill] = true;
+        results.push(skill);
+      }
+    }
+    return results;
+  }
+
+  function syncSkillCheckboxes() {
+    for (var i = 0; i < skillCheckboxes.length; i += 1) {
+      var checkbox = skillCheckboxes[i];
+      if (!checkbox) {
+        continue;
+      }
+      checkbox.checked = indexOfValue(selectedSkills, checkbox.value) !== -1;
+    }
+  }
+
+  function updateSkillDisplay() {
+    if (!skillTrigger) {
+      return;
+    }
+    if (!selectedSkills || selectedSkills.length === 0) {
+      skillTrigger.innerHTML = 'All skills';
+      return;
+    }
+    if (selectedSkills.length === 1) {
+      skillTrigger.innerHTML = selectedSkills[0];
+      return;
+    }
+    if (selectedSkills.length === 2) {
+      skillTrigger.innerHTML = selectedSkills[0] + ', ' + selectedSkills[1];
+      return;
+    }
+    var remainder = selectedSkills.length - 1;
+    skillTrigger.innerHTML = selectedSkills[0] + ' +' + remainder + ' more';
+  }
+
+  function toggleSkillPanel(event) {
+    event = preventDefault(event);
+    stopPropagation(event);
+    if (!skillPanel) {
+      return false;
+    }
+    if (hasClass(skillPanel, 'hidden')) {
+      openSkillPanel();
+    } else {
+      closeSkillPanel();
+    }
+    return false;
+  }
+
+  function openSkillPanel() {
+    if (!skillPanel) {
+      return;
+    }
+    syncSkillCheckboxes();
+    removeClass(skillPanel, 'hidden');
+  }
+
+  function closeSkillPanel() {
+    if (!skillPanel) {
+      return;
+    }
+    addClass(skillPanel, 'hidden');
+  }
+
+  function handleSkillChange(event) {
+    var checkbox = event.target || event.srcElement;
+    if (!checkbox) {
+      return;
+    }
+    var value = checkbox.value;
+    if (checkbox.checked) {
+      if (indexOfValue(selectedSkills, value) === -1) {
+        selectedSkills.push(value);
+      }
+    } else {
+      removeValue(selectedSkills, value);
+    }
+    updateSkillDisplay();
+  }
+
+  function openFilterModal(event) {
+    if (event) {
+      preventDefault(event);
+      stopPropagation(event);
+    }
+    if (!filterModal || !filterBackdrop) {
+      return false;
+    }
+    populateFilterFormFromState();
+    removeClass(filterModal, 'hidden');
+    removeClass(filterBackdrop, 'hidden');
+    isFilterModalVisible = true;
+    hideCalendar();
+    closeSkillPanel();
+    if (filterPhoneInput && filterPhoneInput.focus) {
+      filterPhoneInput.focus();
+    }
+    return false;
+  }
+
+  function closeFilterModal(event) {
+    if (event) {
+      preventDefault(event);
+    }
+    if (!filterModal || !filterBackdrop) {
+      return false;
+    }
+    addClass(filterModal, 'hidden');
+    addClass(filterBackdrop, 'hidden');
+    isFilterModalVisible = false;
+    hideCalendar();
+    closeSkillPanel();
+    populateFilterFormFromState();
+    return false;
+  }
+
+  function handleFilterSubmit(event) {
+    event = preventDefault(event);
+    if (filterPhoneInput) {
+      activeFilters.phone = trimValue(filterPhoneInput.value);
+    }
+    if (filterReasonInput) {
+      activeFilters.reason = trimValue(filterReasonInput.value);
+    }
+    if (filterFromDateInput) {
+      activeFilters.fromDate = trimValue(filterFromDateInput.value);
+    }
+    if (filterFromHourSelect) {
+      activeFilters.fromHour = trimValue(filterFromHourSelect.value);
+    }
+    if (filterFromMinuteSelect) {
+      activeFilters.fromMinute = trimValue(filterFromMinuteSelect.value);
+    }
+    if (filterToDateInput) {
+      activeFilters.toDate = trimValue(filterToDateInput.value);
+    }
+    if (filterToHourSelect) {
+      activeFilters.toHour = trimValue(filterToHourSelect.value);
+    }
+    if (filterToMinuteSelect) {
+      activeFilters.toMinute = trimValue(filterToMinuteSelect.value);
+    }
+    if (filterCallStatusSelect) {
+      activeFilters.callStatus = trimValue(filterCallStatusSelect.value);
+    }
+    if (filterLastStatusSelect) {
+      activeFilters.lastStatus = trimValue(filterLastStatusSelect.value);
+    }
+    if (filterAgentSelect) {
+      activeFilters.agent = trimValue(filterAgentSelect.value);
+    }
+    activeFilters.skills = selectedSkills.slice(0);
+    runFilters();
+    closeFilterModal();
+    return false;
+  }
+
+  function handleFilterClear(event) {
+    event = preventDefault(event);
+    resetActiveFilters();
+    selectedSkills = [];
+    populateFilterFormFromState();
+    runFilters();
+    return false;
+  }
+
+  function resetActiveFilters() {
+    activeFilters.phone = '';
+    activeFilters.reason = '';
+    activeFilters.fromDate = '';
+    activeFilters.fromHour = '';
+    activeFilters.fromMinute = '';
+    activeFilters.toDate = '';
+    activeFilters.toHour = '';
+    activeFilters.toMinute = '';
+    activeFilters.callStatus = '';
+    activeFilters.lastStatus = '';
+    activeFilters.skills = [];
+    activeFilters.agent = '';
+  }
+
+  function handleCalendarTrigger(event) {
+    event = preventDefault(event);
+    stopPropagation(event);
+    var trigger = event.target || event.srcElement;
+    if (!trigger) {
+      return false;
+    }
+    var targetId = trigger.getAttribute('data-target');
+    if (!targetId) {
+      return false;
+    }
+    var input = document.getElementById(targetId);
+    if (!input) {
+      return false;
+    }
+    openCalendar(trigger, input);
+    return false;
+  }
+
+  function openCalendar(trigger, input) {
+    if (!calendarContainer) {
+      return;
+    }
+    calendarTargetInput = input;
+    var parsed = parseInputDate(input.value);
+    if (parsed) {
+      calendarYear = parsed.year;
+      calendarMonth = parsed.month;
+    } else {
+      var today = new Date();
+      calendarYear = today.getFullYear();
+      calendarMonth = today.getMonth();
+    }
+    renderCalendar(calendarYear, calendarMonth, input.value);
+    setCalendarPosition(trigger);
+    removeClass(calendarContainer, 'hidden');
+    isCalendarVisible = true;
+  }
+
+  function setCalendarPosition(trigger) {
+    if (!calendarContainer) {
+      return;
+    }
+    var parent = calendarContainer.offsetParent;
+    if (!parent) {
+      return;
+    }
+    var triggerRect = trigger.getBoundingClientRect();
+    var parentRect = parent.getBoundingClientRect();
+    var scrollTop = parent.scrollTop || 0;
+    var scrollLeft = parent.scrollLeft || 0;
+    var top = triggerRect.bottom - parentRect.top + scrollTop + 4;
+    var left = triggerRect.left - parentRect.left + scrollLeft;
+    calendarContainer.style.top = top + 'px';
+    calendarContainer.style.left = left + 'px';
+  }
+
+  function renderCalendar(year, month, selectedValue) {
+    if (!calendarLabel || !calendarGrid) {
+      return;
+    }
+    var monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    calendarLabel.innerHTML = monthNames[month] + ' ' + year;
+    var firstDay = new Date(year, month, 1);
+    var startingDay = firstDay.getDay();
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var selectedParts = parseInputDate(selectedValue);
+    var rows = '';
+    var day = 1;
+    for (var i = 0; i < 6; i += 1) {
+      rows += '<tr>';
+      for (var j = 0; j < 7; j += 1) {
+        var cellIndex = i * 7 + j;
+        if (cellIndex < startingDay || day > daysInMonth) {
+          rows += '<td><div class="calendar-day-empty"></div></td>';
+        } else {
+          var classes = 'calendar-day';
+          if (selectedParts && selectedParts.year === year && selectedParts.month === month && selectedParts.day === day) {
+            classes += ' selected';
+          }
+          rows += '<td><button type="button" class="' + classes + '" data-day="' + day + '">' + day + '</button></td>';
+          day += 1;
+        }
+      }
+      rows += '</tr>';
+    }
+    calendarGrid.innerHTML = rows;
+  }
+
+  function handleCalendarPrev(event) {
+    event = preventDefault(event);
+    if (!isCalendarVisible) {
+      return false;
+    }
+    calendarMonth -= 1;
+    if (calendarMonth < 0) {
+      calendarMonth = 11;
+      calendarYear -= 1;
+    }
+    renderCalendar(calendarYear, calendarMonth, calendarTargetInput ? calendarTargetInput.value : '');
+    return false;
+  }
+
+  function handleCalendarNext(event) {
+    event = preventDefault(event);
+    if (!isCalendarVisible) {
+      return false;
+    }
+    calendarMonth += 1;
+    if (calendarMonth > 11) {
+      calendarMonth = 0;
+      calendarYear += 1;
+    }
+    renderCalendar(calendarYear, calendarMonth, calendarTargetInput ? calendarTargetInput.value : '');
+    return false;
+  }
+
+  function handleCalendarGridClick(event) {
+    var target = event.target || event.srcElement;
+    if (!target || !hasClass(target, 'calendar-day') || hasClass(target, 'disabled')) {
+      return;
+    }
+    var dayValue = parseInt(target.getAttribute('data-day'), 10);
+    if (isNaN(dayValue) || !calendarTargetInput) {
+      return;
+    }
+    var formatted = formatCalendarDate(calendarYear, calendarMonth, dayValue);
+    calendarTargetInput.value = formatted;
+    hideCalendar();
+  }
+
+  function hideCalendar() {
+    if (!calendarContainer) {
+      return;
+    }
+    addClass(calendarContainer, 'hidden');
+    isCalendarVisible = false;
+    calendarTargetInput = null;
+  }
+
+  function formatCalendarDate(year, month, day) {
+    return year + '-' + padNumber(month + 1) + '-' + padNumber(day);
+  }
+
+  function parseInputDate(value) {
+    if (!value) {
+      return null;
+    }
+    var parts = value.split('-');
+    if (parts.length !== 3) {
+      return null;
+    }
+    var year = parseInt(parts[0], 10);
+    var month = parseInt(parts[1], 10) - 1;
+    var day = parseInt(parts[2], 10);
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return null;
+    }
+    return { year: year, month: month, day: day };
+  }
+
+  function handleDocumentClick(event) {
+    event = event || window.event;
+    var target = event.target || event.srcElement;
+    if (!isFilterModalVisible) {
+      return;
+    }
+    if (skillPanel && !hasClass(skillPanel, 'hidden') && !isDescendant(skillPanel, target) && target !== skillTrigger && !isDescendant(skillTrigger, target)) {
+      closeSkillPanel();
+    }
+    if (isCalendarVisible && calendarContainer && !isDescendant(calendarContainer, target) && !hasClass(target, 'calendar-trigger')) {
+      hideCalendar();
+    }
   }
 
   function handleTableClick(event) {
@@ -443,7 +1236,7 @@
     updateCallbackNotes(currentNoteId, reasonValue, label, trimmedText);
 
     closeModal();
-    renderCallbacks();
+    runFilters();
     return false;
   }
 
@@ -500,9 +1293,78 @@
 
   function handleKeyDown(event) {
     event = event || window.event;
-    if (event.keyCode === 27 && isModalVisible) {
-      closeModal(event);
+    if (event.keyCode === 27) {
+      if (isCalendarVisible) {
+        hideCalendar();
+        return;
+      }
+      if (isFilterModalVisible) {
+        closeFilterModal(event);
+        return;
+      }
+      if (isModalVisible) {
+        closeModal(event);
+      }
     }
+  }
+
+  function padNumber(value) {
+    return value < 10 ? '0' + value : String(value);
+  }
+
+  function indexOfValue(array, value) {
+    if (!array) {
+      return -1;
+    }
+    for (var i = 0; i < array.length; i += 1) {
+      if (array[i] === value) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function removeValue(array, value) {
+    if (!array) {
+      return;
+    }
+    for (var i = array.length - 1; i >= 0; i -= 1) {
+      if (array[i] === value) {
+        array.splice(i, 1);
+      }
+    }
+  }
+
+  function stopPropagation(event) {
+    if (!event) {
+      return;
+    }
+    if (event.stopPropagation) {
+      event.stopPropagation();
+    } else {
+      event.cancelBubble = true;
+    }
+  }
+
+  function hasClass(element, className) {
+    if (!element || !className || !element.className) {
+      return false;
+    }
+    return new RegExp('(^|\\s)' + className + '(\\s|$)').test(element.className);
+  }
+
+  function isDescendant(parent, child) {
+    if (!parent || !child) {
+      return false;
+    }
+    var node = child;
+    while (node) {
+      if (node === parent) {
+        return true;
+      }
+      node = node.parentNode;
+    }
+    return false;
   }
 
   function formatPhone(phone) {
