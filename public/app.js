@@ -9,7 +9,7 @@
     other: 'Other'
   };
 
-  var callbacks = [
+  var seedCallbacks = [
     {
       id: 150,
       time: '06/19/2025 03:04:44',
@@ -172,6 +172,7 @@
     }
   ];
 
+  var callbacks = seedCallbacks.slice(0);
   var currentList = [];
 
   var activeFilters = {
@@ -233,6 +234,7 @@
 
   var isFilterModalVisible = false;
   var isCalendarVisible = false;
+  var socket = null;
 
   function initializeApp() {
     cacheElements();
@@ -240,6 +242,7 @@
     initializeFilters();
     currentList = callbacks.slice(0);
     runFilters();
+    setupRealtime();
   }
 
   function cacheElements() {
@@ -425,6 +428,38 @@
     return '<button class="action-call" type="button">' + action.text + '</button>';
   }
 
+  function setupRealtime() {
+    if (socket || typeof window.io !== 'function') {
+      if (!socket && typeof window.io !== 'function') {
+        logInfo('Socket.io client not available; skipping realtime updates.');
+      }
+      return;
+    }
+
+    try {
+      socket = window.io({ transports: ['websocket', 'polling'] });
+    } catch (err) {
+      logInfo('Failed to initialise realtime connection: ' + (err && err.message ? err.message : err));
+      socket = null;
+      return;
+    }
+
+    socket.on('callbacks:update', function (payload) {
+      var normalized = normalizeIncomingCallbacks(payload);
+      if (normalized !== null) {
+        setCallbacks(normalized);
+      }
+    });
+
+    socket.on('connect_error', function (err) {
+      logInfo('Realtime connection error: ' + (err && err.message ? err.message : err));
+    });
+
+    socket.on('reconnect', function () {
+      logInfo('Realtime connection re-established.');
+    });
+  }
+
   function initializeFilters() {
     populateTimeSelect(filterFromHourSelect, 23, 1);
     populateTimeSelect(filterToHourSelect, 23, 1);
@@ -435,7 +470,6 @@
     buildSkillOptions(getUniqueSkills());
     attachCalendarTriggers();
     populateFilterFormFromState();
-    updateSkillDisplay();
   }
 
   function populateTimeSelect(selectElement, maxValue, step) {
@@ -559,6 +593,32 @@
       filterAgentSelect.value = activeFilters.agent;
     }
     selectedSkills = activeFilters.skills.slice(0);
+    syncSkillCheckboxes();
+    updateSkillDisplay();
+  }
+
+  function setCallbacks(items) {
+    if (items && typeof items.length === 'number') {
+      callbacks = items.slice(0);
+    } else {
+      callbacks = [];
+    }
+    refreshFiltersAfterData();
+    runFilters();
+  }
+
+  function refreshFiltersAfterData() {
+    populateCallStatusOptions();
+    if (filterCallStatusSelect) {
+      filterCallStatusSelect.value = activeFilters.callStatus;
+    }
+    populateAgentOptions();
+    if (filterAgentSelect) {
+      filterAgentSelect.value = activeFilters.agent;
+    }
+    var skillsReference = isFilterModalVisible ? selectedSkills.slice(0) : activeFilters.skills.slice(0);
+    buildSkillOptions(getUniqueSkills());
+    selectedSkills = skillsReference;
     syncSkillCheckboxes();
     updateSkillDisplay();
   }
@@ -1089,6 +1149,220 @@
       return null;
     }
     return { year: year, month: month, day: day };
+  }
+
+  function normalizeIncomingCallbacks(payload) {
+    if (payload === undefined || payload === null) {
+      return [];
+    }
+
+    var data = convertToArray(payload);
+    if (data === null) {
+      return null;
+    }
+
+    var normalized = [];
+    for (var i = 0; i < data.length; i += 1) {
+      var source = data[i] || {};
+
+      var idValue = pickValue(source, ['id', 'Id', 'ID']);
+      if (idValue === undefined || idValue === null || idValue === '') {
+        idValue = i + 1;
+      }
+
+      var timeValue = pickValue(source, ['time', 'Time', 'timeStamp', 'TimeStamp', 'timestamp']);
+      var phoneValue = toStringSafeClient(pickValue(source, ['phone', 'Phone', 'contactNumber']));
+      var waitingValue = toStringSafeClient(pickValue(source, ['waiting', 'Waiting']));
+      var skillValue = toStringSafeClient(pickValue(source, ['skill', 'Skill', 'queue']));
+      var agentValue = toStringSafeClient(pickValue(source, ['agent', 'Agent', 'assignedAgent']));
+      if (!agentValue) {
+        agentValue = 'Unassigned';
+      }
+      var abandonTimeValue = pickValue(source, ['abandonTime', 'AbandonTime']);
+      var callbackTimeValue = pickValue(source, ['callbackTime', 'CallbackTime']);
+      var conversationValue = toStringSafeClient(pickValue(source, ['conversation', 'Conversation', 'conversationDuration']));
+      var kpiValue = toStringSafeClient(pickValue(source, ['kpi', 'Kpi', 'KPI']));
+
+      var notesData = source.notes && typeof source.notes === 'object' ? source.notes : null;
+      var reasonCodeValue = toStringSafeClient(pickValue(notesData, ['code'])) || toStringSafeClient(pickValue(source, ['reasonCode', 'ReasonCode']));
+      var reasonTagValue = toStringSafeClient(pickValue(notesData, ['tag'])) || toStringSafeClient(pickValue(source, ['reasonTag', 'ReasonTag', 'Reason', 'ReasonLabel']));
+      var notesValue = toStringSafeClient(pickValue(notesData, ['text'])) || toStringSafeClient(pickValue(source, ['notes', 'Notes', 'Note', 'NoteText']));
+
+      var lastStatusData = source.lastStatus && typeof source.lastStatus === 'object' ? source.lastStatus : null;
+      var lastStatusText = toStringSafeClient(pickValue(lastStatusData, ['text'])) || toStringSafeClient(pickValue(source, ['lastStatus', 'LastStatus']));
+      var lastStatusType = toStringSafeClient(pickValue(lastStatusData, ['type']));
+      if (!lastStatusType) {
+        lastStatusType = normalizeStatusType(lastStatusText);
+      }
+
+      var callStatusData = source.callStatus && typeof source.callStatus === 'object' ? source.callStatus : null;
+      var callStatusText = toStringSafeClient(pickValue(callStatusData, ['text'])) || toStringSafeClient(pickValue(source, ['callStatus', 'CallStatus', 'Status']));
+      var callStatusType = toStringSafeClient(pickValue(callStatusData, ['type']));
+      if (!callStatusType) {
+        callStatusType = normalizeStatusType(callStatusText);
+      }
+
+      var actionData = source.action && typeof source.action === 'object' ? source.action : null;
+      var actionType = toStringSafeClient(pickValue(actionData, ['type']));
+      var actionText = toStringSafeClient(pickValue(actionData, ['text']));
+      if (!actionType || !actionText) {
+        var fallbackAction = clientBuildActionFromStatus(callStatusText);
+        actionType = actionType || fallbackAction.type;
+        actionText = actionText || fallbackAction.text;
+      }
+
+      normalized.push({
+        id: idValue,
+        time: formatDateTimeClient(timeValue),
+        phone: phoneValue || '-',
+        lastStatus: {
+          type: normalizeStatusType(lastStatusText),
+          text: lastStatusText || '-'
+        },
+        skill: skillValue || '',
+        agent: agentValue || 'Unassigned',
+        waiting: waitingValue || '-',
+        abandonTime: formatDateTimeClient(abandonTimeValue),
+        callbackTime: formatDateTimeClient(callbackTimeValue),
+        conversation: conversationValue || '-',
+        kpi: kpiValue || 'N/A',
+        notes: {
+          code: reasonCodeValue,
+          tag: reasonTagValue,
+          text: notesValue
+        },
+        callStatus: {
+          type: normalizeStatusType(callStatusText),
+          text: callStatusText || '-'
+        },
+        action: {
+          type: actionType,
+          text: actionText
+        }
+      });
+    }
+
+    return normalized;
+  }
+
+  function convertToArray(payload) {
+    if (payload && typeof payload.length === 'number') {
+      return payload;
+    }
+    if (payload && payload.recordset && typeof payload.recordset.length === 'number') {
+      return payload.recordset;
+    }
+    if (payload && payload.data && typeof payload.data.length === 'number') {
+      return payload.data;
+    }
+    if (payload === null || payload === undefined) {
+      return null;
+    }
+    return null;
+  }
+
+  function pickValue(source, keys) {
+    if (!source || typeof source !== 'object') {
+      return null;
+    }
+    for (var i = 0; i < keys.length; i += 1) {
+      var key = keys[i];
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        var value = source[key];
+        if (value !== undefined && value !== null && value !== '') {
+          return value;
+        }
+      }
+    }
+    return null;
+  }
+
+  function toStringSafeClient(value) {
+    if (value === undefined || value === null) {
+      return '';
+    }
+    if (value instanceof Date) {
+      return formatDateTimeClient(value);
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return value.toString();
+    }
+    return String(value);
+  }
+
+  function formatDateTimeClient(value) {
+    if (!value && value !== 0) {
+      return '-';
+    }
+    if (value instanceof Date) {
+      return formatDateParts(value);
+    }
+    if (typeof value === 'number') {
+      var numericDate = new Date(value);
+      if (!isNaN(numericDate.getTime())) {
+        return formatDateParts(numericDate);
+      }
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    return String(value);
+  }
+
+  function formatDateParts(date) {
+    return (
+      padNumber(date.getMonth() + 1) +
+      '/' +
+      padNumber(date.getDate()) +
+      '/' +
+      date.getFullYear() +
+      ' ' +
+      padNumber(date.getHours()) +
+      ':' +
+      padNumber(date.getMinutes()) +
+      ':' +
+      padNumber(date.getSeconds())
+    );
+  }
+
+  function normalizeStatusType(statusText) {
+    if (!statusText) {
+      return '';
+    }
+    var label = statusText.toLowerCase();
+    var map = {
+      waiting: 'waiting',
+      called: 'called',
+      'no answer': 'no-answer',
+      'no_answer': 'no-answer',
+      noanswer: 'no-answer',
+      busy: 'busy',
+      calling: 'calling',
+      abandon: 'abandon',
+      abandoned: 'abandon',
+      callback: 'callback'
+    };
+    if (map[label]) {
+      return map[label];
+    }
+    return label.replace(/[^a-z0-9]+/g, '-');
+  }
+
+  function clientBuildActionFromStatus(statusText) {
+    var label = (statusText || '').toLowerCase();
+    if (label === 'calling') {
+      return { type: 'disabled', text: 'Calling...' };
+    }
+    return { type: 'call', text: 'Call' };
+  }
+
+  function logInfo(message) {
+    if (window.console && console.log) {
+      console.log(message);
+    }
   }
 
   function handleDocumentClick(event) {
