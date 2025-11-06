@@ -8,6 +8,7 @@ var sql = require('mssql');
 var app = express();
 var PORT = process.env.PORT || 3000;
 var POLL_INTERVAL = parseInt(process.env.CALLBACK_POLL_INTERVAL_MS, 10) || 5000;
+var CALL_STATUS_CALLING = process.env.CALLBACK_CALLING_STATUS || 'Calling';
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -21,6 +22,7 @@ var io = require('socket.io')(server, {
 
 var dbConfig = createDbConfigFromEnv();
 var queryText = process.env.CALLBACK_QUERY;
+var updateQueryText = process.env.CALLBACK_UPDATE_QUERY || null;
 var isDbConfigured = isDatabaseConfigured(dbConfig, queryText);
 var latestCallbacks = getSeedCallbacks();
 var pool = null;
@@ -29,6 +31,20 @@ var fallbackIdCounter = 1000;
 
 io.on('connection', function (socket) {
   socket.emit('callbacks:update', latestCallbacks);
+
+  socket.on('callbacks:call', function (payload, ack) {
+    processCallRequest(payload)
+      .then(function (result) {
+        if (typeof ack === 'function') {
+          ack({ success: true, updated: result.updated });
+        }
+      })
+      .catch(function (err) {
+        if (typeof ack === 'function') {
+          ack({ success: false, error: err && err.message ? err.message : String(err) });
+        }
+      });
+  });
 });
 
 app.get('*', function (req, res) {
@@ -79,6 +95,48 @@ function mapRows(rows) {
 function broadcastCallbacks(data) {
   latestCallbacks = data;
   io.emit('callbacks:update', latestCallbacks);
+}
+
+function processCallRequest(payload) {
+  return new Promise(function (resolve, reject) {
+    if (!payload || payload.id === undefined || payload.id === null || payload.id === '') {
+      return reject(new Error('INVALID_CALLBACK_ID'));
+    }
+
+    var idValue = String(payload.id);
+    var agentLabel = trimValue(payload.agentLabel || payload.agentName || payload.agentCode) || 'Agent';
+    var statusText = CALL_STATUS_CALLING;
+
+    var updatePromise = Promise.resolve();
+    if (isDbConfigured && updateQueryText) {
+      updatePromise = getPool()
+        .then(function (activePool) {
+          var request = activePool.request();
+          request.input('id', sql.VarChar, idValue);
+          request.input('agent', sql.NVarChar, agentLabel);
+          request.input('status', sql.NVarChar, statusText);
+          request.input('updatedAt', sql.DateTime, new Date());
+          return request.query(updateQueryText);
+        });
+    } else if (isDbConfigured && !updateQueryText) {
+      logError('CALLBACK_UPDATE_QUERY not configured; skipping database update', '');
+    }
+
+    updatePromise
+      .then(function () {
+        var changed = markCallbackAsCalling(idValue, agentLabel, statusText);
+        if (changed) {
+          broadcastCallbacks(latestCallbacks);
+        } else {
+          pollDatabase();
+        }
+        resolve({ updated: changed });
+      })
+      .catch(function (err) {
+        logError('Failed to update callback status', err);
+        reject(new Error('DATABASE_UPDATE_FAILED'));
+      });
+  });
 }
 
 function getPool() {
@@ -157,6 +215,26 @@ function mapRowToCallback(row, index) {
     },
     action: buildActionFromStatus(callStatusText)
   };
+}
+
+function markCallbackAsCalling(identifier, agentLabel, statusText) {
+  var matched = false;
+  var normalizedId = String(identifier);
+  var normalizedStatus = normalizeStatusType(statusText || CALL_STATUS_CALLING);
+  for (var i = 0; i < latestCallbacks.length; i += 1) {
+    var item = latestCallbacks[i];
+    if (String(item.id) === normalizedId) {
+      item.agent = agentLabel;
+      item.callStatus = {
+        type: normalizedStatus,
+        text: statusText || CALL_STATUS_CALLING
+      };
+      item.action = { type: 'disabled', text: 'Calling...' };
+      matched = true;
+      break;
+    }
+  }
+  return matched;
 }
 
 function buildActionFromStatus(statusText) {
@@ -250,6 +328,13 @@ function formatDate(date) {
 
 function padNumber(value) {
   return value < 10 ? '0' + value : String(value);
+}
+
+function trimValue(value) {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value).replace(/^\s+|\s+$/g, '');
 }
 
 function createDbConfigFromEnv() {

@@ -9,6 +9,9 @@
     other: 'Other'
   };
 
+  var CALLING_STATUS_TEXT = 'Calling';
+  var CALLING_ACTION_TEXT = 'Calling...';
+
   var seedCallbacks = [
     {
       id: 150,
@@ -167,8 +170,8 @@
         tag: 'Escalation',
         text: 'Transferred to supervisor for resolution'
       },
-      callStatus: { type: 'calling', text: 'Calling' },
-      action: { type: 'disabled', text: 'Calling...' }
+      callStatus: { type: 'calling', text: CALLING_STATUS_TEXT },
+      action: { type: 'disabled', text: CALLING_ACTION_TEXT }
     }
   ];
 
@@ -365,8 +368,9 @@
   }
 
   function buildRow(item) {
+    var rowIdAttr = escapeAttribute(item.id);
     return (
-      '<tr>' +
+      '<tr data-callback-id="' + rowIdAttr + '">' +
       '<td>' + item.id + '</td>' +
       '<td>' + item.time + '</td>' +
       '<td>' + formatPhone(item.phone) + '</td>' +
@@ -1354,7 +1358,7 @@
   function clientBuildActionFromStatus(statusText) {
     var label = (statusText || '').toLowerCase();
     if (label === 'calling') {
-      return { type: 'disabled', text: 'Calling...' };
+      return { type: 'disabled', text: CALLING_ACTION_TEXT };
     }
     return { type: 'call', text: 'Call' };
   }
@@ -1381,8 +1385,14 @@
 
   function handleTableClick(event) {
     event = event || window.event;
-    var target = event.target || event.srcElement;
+    var originalTarget = event.target || event.srcElement;
 
+    if (hasClass(originalTarget, 'action-call')) {
+      handleCallButton(originalTarget, event);
+      return;
+    }
+
+    var target = originalTarget;
     while (target && target !== tableBody && target.tagName !== 'TD') {
       target = target.parentNode;
     }
@@ -1414,12 +1424,145 @@
   }
 
   function findCallbackById(id) {
+    var normalizedId = String(id);
     for (var i = 0; i < callbacks.length; i += 1) {
-      if (callbacks[i].id === id) {
+      if (String(callbacks[i].id) === normalizedId) {
         return callbacks[i];
       }
     }
     return null;
+  }
+
+  function handleCallButton(button, event) {
+    if (event && event.preventDefault) {
+      event.preventDefault();
+    } else if (event) {
+      event.returnValue = false;
+    }
+    if (event) {
+      stopPropagation(event);
+    }
+
+    if (!button || button.disabled) {
+      return;
+    }
+
+    var row = findParentRow(button);
+    if (!row) {
+      return;
+    }
+
+    var callbackId = row.getAttribute('data-callback-id');
+    if (!callbackId) {
+      return;
+    }
+
+    var agentInfo = getCurrentAgentInfo();
+    var originalState = captureCallbackState(callbackId);
+
+    if (!applyLocalCallState(callbackId, agentInfo.label)) {
+      logInfo('Callback not found for id ' + callbackId);
+      return;
+    }
+
+    if (!socket) {
+      logInfo('Realtime socket not available; local update only.');
+      return;
+    }
+
+    socket.emit(
+      'callbacks:call',
+      {
+        id: callbackId,
+        agentName: agentInfo.name,
+        agentCode: agentInfo.code,
+        agentLabel: agentInfo.label
+      },
+      function (response) {
+        if (!response || response.success !== true) {
+          if (restoreCallbackState(callbackId, originalState)) {
+            refreshFiltersAfterData();
+            runFilters();
+          }
+          logInfo('Call update failed: ' + (response && response.error ? response.error : 'Unknown error'));
+        }
+      }
+    );
+  }
+
+  function findParentRow(element) {
+    var node = element;
+    while (node && node !== tableBody && node.tagName !== 'TR') {
+      node = node.parentNode;
+    }
+    if (node && node.tagName === 'TR') {
+      return node;
+    }
+    return null;
+  }
+
+  function getCurrentAgentInfo() {
+    var nameElement = document.querySelector ? document.querySelector('.user-name') : null;
+    var roleElement = document.querySelector ? document.querySelector('.user-role') : null;
+    var name = trimValue(nameElement ? nameElement.textContent || nameElement.innerText : '') || 'Agent';
+    var code = trimValue(roleElement ? roleElement.textContent || roleElement.innerText : '');
+    var label = name;
+    if (code) {
+      label = trimValue(name + ' ' + code);
+    }
+    return {
+      name: name,
+      code: code,
+      label: label
+    };
+  }
+
+  function captureCallbackState(callbackId) {
+    var item = findCallbackById(callbackId);
+    if (!item) {
+      return null;
+    }
+    return {
+      agent: item.agent,
+      callStatus: item.callStatus
+        ? { type: item.callStatus.type, text: item.callStatus.text }
+        : null,
+      action: item.action ? { type: item.action.type, text: item.action.text } : null
+    };
+  }
+
+  function restoreCallbackState(callbackId, snapshot) {
+    if (!snapshot) {
+      return false;
+    }
+    var item = findCallbackById(callbackId);
+    if (!item) {
+      return false;
+    }
+    item.agent = snapshot.agent;
+    item.callStatus = snapshot.callStatus
+      ? { type: snapshot.callStatus.type, text: snapshot.callStatus.text }
+      : null;
+    item.action = snapshot.action
+      ? { type: snapshot.action.type, text: snapshot.action.text }
+      : null;
+    return true;
+  }
+
+  function applyLocalCallState(callbackId, agentLabel) {
+    var item = findCallbackById(callbackId);
+    if (!item) {
+      return false;
+    }
+    item.agent = agentLabel;
+    item.callStatus = {
+      type: normalizeStatusType(CALLING_STATUS_TEXT),
+      text: CALLING_STATUS_TEXT
+    };
+    item.action = { type: 'disabled', text: CALLING_ACTION_TEXT };
+    refreshFiltersAfterData();
+    runFilters();
+    return true;
   }
 
   function openModal(item) {
@@ -1650,6 +1793,18 @@
       return cleaned.substr(0, 4) + ' ' + cleaned.substr(4, 3) + ' ' + cleaned.substr(7);
     }
     return phone;
+  }
+
+  function escapeAttribute(value) {
+    if (value === undefined || value === null) {
+      return '';
+    }
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   function addEvent(element, type, handler) {
