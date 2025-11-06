@@ -182,6 +182,7 @@
   var pagerPrev = null;
   var pagerNext = null;
   var pagerInfo = null;
+  var filterSummary = null;
 
   var activeFilters = {
     phone: '',
@@ -248,6 +249,7 @@
     cacheElements();
     bindEvents();
     initializeFilters();
+    updateFilterSummary();
     currentList = callbacks.slice(0);
     runFilters();
     setupRealtime();
@@ -288,6 +290,7 @@
     pagerPrev = document.getElementById('pager-prev');
     pagerNext = document.getElementById('pager-next');
     pagerInfo = document.getElementById('pager-info');
+    filterSummary = document.getElementById('filter-summary');
   }
 
   function bindEvents() {
@@ -449,6 +452,113 @@
     }
   }
 
+  function requestFilteredData() {
+    if (!socket) {
+      logInfo('Realtime socket not available; skipping server-side filter fetch.');
+      return;
+    }
+
+    var payload = buildFilterPayload();
+    socket.emit('callbacks:filter', payload, function (response) {
+      if (response && response.success && response.callbacks) {
+        setCallbacks(response.callbacks);
+      } else if (response && response.error) {
+        logInfo('Filter request failed: ' + response.error);
+      }
+    });
+  }
+
+  function buildFilterPayload() {
+    return {
+      phone: trimValue(activeFilters.phone),
+      reason: trimValue(activeFilters.reason),
+      fromDate: trimValue(activeFilters.fromDate),
+      fromHour: trimValue(activeFilters.fromHour),
+      fromMinute: trimValue(activeFilters.fromMinute),
+      toDate: trimValue(activeFilters.toDate),
+      toHour: trimValue(activeFilters.toHour),
+      toMinute: trimValue(activeFilters.toMinute),
+      callStatus: trimValue(activeFilters.callStatus),
+      lastStatus: trimValue(activeFilters.lastStatus),
+      agent: trimValue(activeFilters.agent),
+      skills: activeFilters.skills ? activeFilters.skills.slice(0) : []
+    };
+  }
+
+  function updateFilterSummary() {
+    if (!filterSummary) {
+      return;
+    }
+
+    var chips = [];
+
+    if (activeFilters.phone) {
+      chips.push({ label: 'Phone', value: activeFilters.phone });
+    }
+    if (activeFilters.reason) {
+      chips.push({ label: 'Reason & Notes', value: activeFilters.reason });
+    }
+
+    var fromText = formatFilterDate(activeFilters.fromDate, activeFilters.fromHour, activeFilters.fromMinute);
+    if (fromText) {
+      chips.push({ label: 'From', value: fromText });
+    }
+    var toText = formatFilterDate(activeFilters.toDate, activeFilters.toHour, activeFilters.toMinute);
+    if (toText) {
+      chips.push({ label: 'To', value: toText });
+    }
+
+    if (activeFilters.callStatus) {
+      chips.push({ label: 'Call Status', value: activeFilters.callStatus });
+    }
+    if (activeFilters.lastStatus) {
+      chips.push({ label: 'Last Status', value: activeFilters.lastStatus });
+    }
+    if (activeFilters.agent) {
+      chips.push({ label: 'Agent', value: activeFilters.agent });
+    }
+    if (activeFilters.skills && activeFilters.skills.length > 0) {
+      chips.push({ label: 'Skills', value: activeFilters.skills.join(', ') });
+    }
+
+    if (chips.length === 0) {
+      filterSummary.innerHTML = '';
+      removeClass(filterSummary, 'has-chips');
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < chips.length; i += 1) {
+      html += '<span class="filter-chip"><span class="filter-chip-label">' + escapeHtml(chips[i].label) + ':</span> ' + escapeHtml(chips[i].value) + '</span>';
+    }
+    filterSummary.innerHTML = html;
+    addClass(filterSummary, 'has-chips');
+  }
+
+  function formatFilterDate(dateValue, hourValue, minuteValue) {
+    if (!dateValue) {
+      return '';
+    }
+    var text = dateValue;
+    if (hourValue) {
+      text += ' ' + padTimePart(hourValue);
+      if (minuteValue) {
+        text += ':' + padTimePart(minuteValue);
+      } else {
+        text += ':00';
+      }
+    }
+    return text;
+  }
+
+  function padTimePart(value) {
+    var num = parseInt(value, 10);
+    if (isNaN(num)) {
+      return value;
+    }
+    return num < 10 ? '0' + num : String(num);
+  }
+
   function buildRow(item) {
     var rowIdAttr = escapeAttribute(item.id);
     return (
@@ -530,6 +640,10 @@
       return;
     }
 
+    socket.on('connect', function () {
+      requestFilteredData();
+    });
+
     socket.on('callbacks:update', function (payload) {
       var normalized = normalizeIncomingCallbacks(payload);
       if (normalized !== null) {
@@ -543,6 +657,7 @@
 
     socket.on('reconnect', function () {
       logInfo('Realtime connection re-established.');
+      requestFilteredData();
     });
   }
 
@@ -707,6 +822,7 @@
     selectedSkills = skillsReference;
     syncSkillCheckboxes();
     updateSkillDisplay();
+    updateFilterSummary();
   }
 
   function runFilters() {
@@ -1059,7 +1175,9 @@
     }
     activeFilters.skills = selectedSkills.slice(0);
     currentPage = 0;
+    updateFilterSummary();
     runFilters();
+    requestFilteredData();
     closeFilterModal();
     return false;
   }
@@ -1070,7 +1188,9 @@
     selectedSkills = [];
     populateFilterFormFromState();
     currentPage = 0;
+    updateFilterSummary();
     runFilters();
+    requestFilteredData();
     return false;
   }
 
@@ -1900,6 +2020,10 @@
       .replace(/'/g, '&#39;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  }
+
+  function escapeHtml(value) {
+    return escapeAttribute(value);
   }
 
   function addEvent(element, type, handler) {

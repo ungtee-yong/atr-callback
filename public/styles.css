@@ -297,6 +297,38 @@ body {
   margin-right: 8px;
 }
 
+.filter-summary {
+  display: -ms-flexbox;
+  display: flex;
+  -ms-flex-wrap: wrap;
+  flex-wrap: wrap;
+  margin-right: 16px;
+  max-width: 45%;
+}
+
+.filter-summary.has-chips {
+  margin-left: 8px;
+}
+
+.filter-chip {
+  display: -ms-inline-flexbox;
+  display: inline-flex;
+  -ms-flex-align: center;
+  align-items: center;
+  background-color: #eef0f8;
+  color: #4d5aa6;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  margin: 0 8px 8px 0;
+}
+
+.filter-chip .filter-chip-label {
+  margin-right: 6px;
+  color: #2f356b;
+}
+
 .toolbar-spacer {
   -ms-flex: 1;
   flex: 1;
@@ -994,6 +1026,12 @@ tbody tr:hover {
 
   .filter-button {
     margin-right: 0;
+  }
+
+  .filter-summary {
+    width: 100%;
+    margin: 12px 0 0;
+    max-width: none;
   }
 
   .list-meta {

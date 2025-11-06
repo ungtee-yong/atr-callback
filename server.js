@@ -23,6 +23,7 @@ var io = require('socket.io')(server, {
 var dbConfig = createDbConfigFromEnv();
 var queryText = process.env.CALLBACK_QUERY;
 var updateQueryText = process.env.CALLBACK_UPDATE_QUERY || null;
+var filterQueryText = process.env.CALLBACK_FILTER_QUERY || null;
 var isDbConfigured = isDatabaseConfigured(dbConfig, queryText);
 var latestCallbacks = getSeedCallbacks();
 var pool = null;
@@ -37,6 +38,20 @@ io.on('connection', function (socket) {
       .then(function (result) {
         if (typeof ack === 'function') {
           ack({ success: true, updated: result.updated });
+        }
+      })
+      .catch(function (err) {
+        if (typeof ack === 'function') {
+          ack({ success: false, error: err && err.message ? err.message : String(err) });
+        }
+      });
+  });
+
+  socket.on('callbacks:filter', function (payload, ack) {
+    processFilterRequest(payload)
+      .then(function (result) {
+        if (typeof ack === 'function') {
+          ack({ success: true, callbacks: result });
         }
       })
       .catch(function (err) {
@@ -137,6 +152,36 @@ function processCallRequest(payload) {
         reject(new Error('DATABASE_UPDATE_FAILED'));
       });
   });
+}
+
+function processFilterRequest(filters) {
+  var normalized = normalizeFilterValues(filters);
+
+  if (isDbConfigured && filterQueryText) {
+    return getPool()
+      .then(function (activePool) {
+        var request = activePool.request();
+        setNullableInput(request, 'phone', sql.VarChar, normalized.phoneRaw);
+        setNullableInput(request, 'reason', sql.NVarChar, normalized.reasonRaw);
+        setNullableInput(request, 'fromDate', sql.DateTime, normalized.fromDateObj);
+        setNullableInput(request, 'toDate', sql.DateTime, normalized.toDateObj);
+        setNullableInput(request, 'callStatus', sql.NVarChar, normalized.callStatusRaw);
+        setNullableInput(request, 'lastStatus', sql.NVarChar, normalized.lastStatusRaw);
+        setNullableInput(request, 'agent', sql.NVarChar, normalized.agentRaw);
+        setNullableInput(request, 'skills', sql.NVarChar, normalized.skillsCsv);
+        return request.query(filterQueryText);
+      })
+      .then(function (result) {
+        var rows = (result && result.recordset) || [];
+        return mapRows(rows);
+      })
+      .catch(function (err) {
+        logError('Filter query failed', err);
+        return filterLatestCallbacks(normalized);
+      });
+  }
+
+  return Promise.resolve(filterLatestCallbacks(normalized));
 }
 
 function getPool() {
@@ -335,6 +380,212 @@ function trimValue(value) {
     return '';
   }
   return String(value).replace(/^\s+|\s+$/g, '');
+}
+
+function setNullableInput(request, name, type, value) {
+  if (value === undefined || value === null || value === '') {
+    request.input(name, type, null);
+  } else {
+    request.input(name, type, value);
+  }
+}
+
+function normalizeFilterValues(filters) {
+  filters = filters || {};
+
+  var phoneOriginal = trimValue(filters.phone);
+  var phoneDigits = phoneOriginal ? digitsOnly(phoneOriginal) : '';
+  var reasonRaw = trimValue(filters.reason);
+  var reasonLower = reasonRaw.toLowerCase();
+  var callStatusRaw = trimValue(filters.callStatus);
+  var callStatusLower = callStatusRaw.toLowerCase();
+  var lastStatusRaw = trimValue(filters.lastStatus);
+  var lastStatusLower = lastStatusRaw.toLowerCase();
+  var agentRaw = trimValue(filters.agent);
+  var agentLower = agentRaw.toLowerCase();
+
+  var skillsArray = [];
+  if (filters.skills && typeof filters.skills.length === 'number') {
+    for (var i = 0; i < filters.skills.length; i += 1) {
+      var skill = trimValue(filters.skills[i]);
+      if (skill) {
+        skillsArray.push(skill);
+      }
+    }
+  }
+  var skillsLower = [];
+  for (var j = 0; j < skillsArray.length; j += 1) {
+    skillsLower.push(skillsArray[j].toLowerCase());
+  }
+
+  var fromDateObj = buildFilterDateObj(filters.fromDate, filters.fromHour, filters.fromMinute, false);
+  var toDateObj = buildFilterDateObj(filters.toDate, filters.toHour, filters.toMinute, true);
+
+  return {
+    phoneRaw: phoneOriginal || null,
+    phoneFilter: phoneDigits,
+    reasonRaw: reasonRaw || null,
+    reasonLower: reasonLower,
+    callStatusRaw: callStatusRaw || null,
+    callStatusLower: callStatusLower,
+    lastStatusRaw: lastStatusRaw || null,
+    lastStatusLower: lastStatusLower,
+    agentRaw: agentRaw || null,
+    agentLower: agentLower,
+    skillsCsv: skillsArray.length > 0 ? skillsArray.join(',') : null,
+    skillsLower: skillsLower,
+    fromDateObj: fromDateObj,
+    fromTimestamp: fromDateObj ? fromDateObj.getTime() : null,
+    toDateObj: toDateObj,
+    toTimestamp: toDateObj ? toDateObj.getTime() : null
+  };
+}
+
+function filterLatestCallbacks(normalized) {
+  var results = [];
+  for (var i = 0; i < latestCallbacks.length; i += 1) {
+    var item = latestCallbacks[i];
+    if (matchesFilter(item, normalized)) {
+      results.push(cloneCallback(item));
+    }
+  }
+  return results;
+}
+
+function matchesFilter(item, normalized) {
+  if (normalized.phoneFilter) {
+    var itemPhone = digitsOnly(item.phone || '');
+    if (itemPhone.indexOf(normalized.phoneFilter) === -1) {
+      return false;
+    }
+  }
+
+  if (normalized.reasonLower) {
+    var tagValue = item.notes && item.notes.tag ? String(item.notes.tag).toLowerCase() : '';
+    var noteValue = item.notes && item.notes.text ? String(item.notes.text).toLowerCase() : '';
+    if (tagValue.indexOf(normalized.reasonLower) === -1 && noteValue.indexOf(normalized.reasonLower) === -1) {
+      return false;
+    }
+  }
+
+  if (normalized.fromTimestamp !== null || normalized.toTimestamp !== null) {
+    var timeValue = parseItemTimeString(item.time);
+    if (timeValue === null) {
+      return false;
+    }
+    if (normalized.fromTimestamp !== null && timeValue < normalized.fromTimestamp) {
+      return false;
+    }
+    if (normalized.toTimestamp !== null && timeValue > normalized.toTimestamp) {
+      return false;
+    }
+  }
+
+  if (normalized.callStatusLower) {
+    var callStatus = item.callStatus && item.callStatus.text ? String(item.callStatus.text).toLowerCase() : '';
+    if (callStatus !== normalized.callStatusLower) {
+      return false;
+    }
+  }
+
+  if (normalized.lastStatusLower) {
+    var lastStatus = item.lastStatus && item.lastStatus.text ? String(item.lastStatus.text).toLowerCase() : '';
+    if (lastStatus !== normalized.lastStatusLower) {
+      return false;
+    }
+  }
+
+  if (normalized.skillsLower.length > 0) {
+    var skillValue = item.skill ? String(item.skill).toLowerCase() : '';
+    if (normalized.skillsLower.indexOf(skillValue) === -1) {
+      return false;
+    }
+  }
+
+  if (normalized.agentLower) {
+    var agentValue = item.agent ? String(item.agent).toLowerCase() : '';
+    if (agentValue !== normalized.agentLower) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function cloneCallback(item) {
+  return JSON.parse(JSON.stringify(item));
+}
+
+function digitsOnly(value) {
+  return value ? String(value).replace(/\D/g, '') : '';
+}
+
+function buildFilterDateObj(dateValue, hourValue, minuteValue, endOfRange) {
+  if (!dateValue) {
+    return null;
+  }
+  var parts = String(dateValue).split('-');
+  if (parts.length !== 3) {
+    return null;
+  }
+  var year = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10) - 1;
+  var day = parseInt(parts[2], 10);
+  var hour = parseInt(hourValue, 10);
+  var minute = parseInt(minuteValue, 10);
+  if (isNaN(year) || isNaN(month) || isNaN(day)) {
+    return null;
+  }
+  if (isNaN(hour)) {
+    hour = endOfRange ? 23 : 0;
+  }
+  if (isNaN(minute)) {
+    minute = endOfRange ? 59 : 0;
+  }
+  var second = endOfRange ? 59 : 0;
+  var millisecond = endOfRange ? 999 : 0;
+  var dateObject = new Date(year, month, day, hour, minute, second, millisecond);
+  if (isNaN(dateObject.getTime())) {
+    return null;
+  }
+  return dateObject;
+}
+
+function parseItemTimeString(value) {
+  if (!value || value === '-') {
+    return null;
+  }
+  var segments = String(value).split(' ');
+  var datePart = segments[0];
+  var timePart = segments.length > 1 ? segments[1] : '00:00:00';
+  var dateParts = datePart.split('/');
+  if (dateParts.length !== 3) {
+    return null;
+  }
+  var month = parseInt(dateParts[0], 10) - 1;
+  var day = parseInt(dateParts[1], 10);
+  var year = parseInt(dateParts[2], 10);
+  if (isNaN(month) || isNaN(day) || isNaN(year)) {
+    return null;
+  }
+  var timeParts = timePart.split(':');
+  var hour = timeParts.length > 0 ? parseInt(timeParts[0], 10) : 0;
+  var minute = timeParts.length > 1 ? parseInt(timeParts[1], 10) : 0;
+  var second = timeParts.length > 2 ? parseInt(timeParts[2], 10) : 0;
+  if (isNaN(hour)) {
+    hour = 0;
+  }
+  if (isNaN(minute)) {
+    minute = 0;
+  }
+  if (isNaN(second)) {
+    second = 0;
+  }
+  var dateObject = new Date(year, month, day, hour, minute, second);
+  if (isNaN(dateObject.getTime())) {
+    return null;
+  }
+  return dateObject.getTime();
 }
 
 function createDbConfigFromEnv() {
