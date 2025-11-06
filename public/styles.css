@@ -670,6 +670,25 @@ tbody tr:hover {
   margin-bottom: 8px;
 }
 
+.filter-row {
+  display: -ms-flexbox;
+  display: flex;
+  -ms-flex-wrap: wrap;
+  flex-wrap: wrap;
+  margin: 0 -8px;
+}
+
+.filter-row .filter-field {
+  -ms-flex: 1 1 220px;
+  flex: 1 1 220px;
+  min-width: 220px;
+  margin: 0 8px 16px;
+}
+
+.filter-row .filter-field:last-child {
+  margin-bottom: 16px;
+}
+
 .filter-date-row {
   display: -ms-flexbox;
   display: flex;
@@ -988,5 +1007,16 @@ tbody tr:hover {
   table {
     display: block;
     overflow-x: auto;
+  }
+
+  .filter-row {
+    margin: 0;
+  }
+
+  .filter-row .filter-field {
+    -ms-flex: 1 1 100%;
+    flex: 1 1 100%;
+    min-width: 0;
+    margin: 0 0 16px;
   }
 }

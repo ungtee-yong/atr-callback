@@ -110,23 +110,25 @@
             <form id="filter-form">
               <section class="filter-section">
                 <h3 class="filter-title">Search</h3>
-                <div class="filter-field">
-                  <label for="filter-phone">Phone</label>
-                  <input
-                    type="text"
-                    id="filter-phone"
-                    class="modal-input"
-                    placeholder="Enter phone number"
-                  />
-                </div>
-                <div class="filter-field">
-                  <label for="filter-reason">Reason &amp; Notes</label>
-                  <input
-                    type="text"
-                    id="filter-reason"
-                    class="modal-input"
-                    placeholder="Search by reason or notes"
-                  />
+                <div class="filter-row">
+                  <div class="filter-field">
+                    <label for="filter-phone">Phone</label>
+                    <input
+                      type="text"
+                      id="filter-phone"
+                      class="modal-input"
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                  <div class="filter-field">
+                    <label for="filter-reason">Reason &amp; Notes</label>
+                    <input
+                      type="text"
+                      id="filter-reason"
+                      class="modal-input"
+                      placeholder="Search by reason or notes"
+                    />
+                  </div>
                 </div>
               </section>
 
@@ -197,38 +199,42 @@
 
               <section class="filter-section">
                 <h3 class="filter-title">Status</h3>
-                <div class="filter-field">
-                  <label for="filter-call-status">Call Status</label>
-                  <select id="filter-call-status" class="modal-input">
-                    <option value="">All call status</option>
-                  </select>
-                </div>
-                <div class="filter-field">
-                  <label for="filter-last-status">Last Status</label>
-                  <select id="filter-last-status" class="modal-input">
-                    <option value="">All last status</option>
-                    <option value="Callback">Callback</option>
-                    <option value="Abandon">Abandon</option>
-                  </select>
+                <div class="filter-row">
+                  <div class="filter-field">
+                    <label for="filter-call-status">Call Status</label>
+                    <select id="filter-call-status" class="modal-input">
+                      <option value="">All call status</option>
+                    </select>
+                  </div>
+                  <div class="filter-field">
+                    <label for="filter-last-status">Last Status</label>
+                    <select id="filter-last-status" class="modal-input">
+                      <option value="">All last status</option>
+                      <option value="Callback">Callback</option>
+                      <option value="Abandon">Abandon</option>
+                    </select>
+                  </div>
                 </div>
               </section>
 
               <section class="filter-section">
                 <h3 class="filter-title">Assignment</h3>
-                <div class="filter-field">
-                  <label for="filter-skills-trigger">Skills</label>
-                  <div class="multi-select" id="filter-skills">
-                    <button type="button" id="filter-skills-trigger" class="multi-select-trigger">
-                      All skills
-                    </button>
-                    <div id="filter-skills-panel" class="multi-select-panel hidden"></div>
+                <div class="filter-row">
+                  <div class="filter-field">
+                    <label for="filter-skills-trigger">Skills</label>
+                    <div class="multi-select" id="filter-skills">
+                      <button type="button" id="filter-skills-trigger" class="multi-select-trigger">
+                        All skills
+                      </button>
+                      <div id="filter-skills-panel" class="multi-select-panel hidden"></div>
+                    </div>
                   </div>
-                </div>
-                <div class="filter-field">
-                  <label for="filter-agent">Agent</label>
-                  <select id="filter-agent" class="modal-input">
-                    <option value="">All agents</option>
-                  </select>
+                  <div class="filter-field">
+                    <label for="filter-agent">Agent</label>
+                    <select id="filter-agent" class="modal-input">
+                      <option value="">All agents</option>
+                    </select>
+                  </div>
                 </div>
               </section>
 
