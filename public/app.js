@@ -177,6 +177,11 @@
 
   var callbacks = seedCallbacks.slice(0);
   var currentList = [];
+  var pageSize = 10;
+  var currentPage = 0;
+  var pagerPrev = null;
+  var pagerNext = null;
+  var pagerInfo = null;
 
   var activeFilters = {
     phone: '',
@@ -280,6 +285,9 @@
     calendarGrid = document.getElementById('calendar-grid');
     calendarPrev = document.getElementById('calendar-prev');
     calendarNext = document.getElementById('calendar-next');
+    pagerPrev = document.getElementById('pager-prev');
+    pagerNext = document.getElementById('pager-next');
+    pagerInfo = document.getElementById('pager-info');
   }
 
   function bindEvents() {
@@ -341,6 +349,14 @@
       addEvent(calendarGrid, 'click', handleCalendarGridClick);
     }
 
+    if (pagerPrev) {
+      addEvent(pagerPrev, 'click', handlePagePrev);
+    }
+
+    if (pagerNext) {
+      addEvent(pagerNext, 'click', handlePageNext);
+    }
+
     addEvent(window, 'keydown', handleKeyDown);
     addEvent(document, 'click', handleDocumentClick);
   }
@@ -350,20 +366,86 @@
       return;
     }
 
+    var total = currentList.length;
+    var totalPages = pageSize > 0 ? Math.ceil(total / pageSize) : 1;
+
+    if (total === 0) {
+      currentPage = 0;
+    } else if (currentPage >= totalPages) {
+      currentPage = totalPages - 1;
+    } else if (currentPage < 0) {
+      currentPage = 0;
+    }
+
+    var start = total === 0 ? 0 : currentPage * pageSize;
+    var end = total === 0 ? 0 : Math.min(start + pageSize, total);
+
     var rowsHtml = '';
-    for (var i = 0; i < currentList.length; i += 1) {
+    for (var i = start; i < end; i += 1) {
       rowsHtml += buildRow(currentList[i]);
     }
 
     tableBody.innerHTML = rowsHtml;
 
+    updatePagerDisplay(total, totalPages, start, end);
+  }
+
+  function updatePagerDisplay(total, totalPages, start, end) {
     var range = document.getElementById('results-range');
     if (range) {
-      if (currentList.length === 0) {
+      if (total === 0) {
         range.innerHTML = '0 results';
       } else {
-        range.innerHTML = '1-' + currentList.length + ' of ' + currentList.length + ' results';
+        range.innerHTML = start + 1 + '-' + end + ' of ' + total + ' results';
       }
+    }
+
+    if (pagerInfo) {
+      if (total === 0) {
+        pagerInfo.innerHTML = 'Page 1 / 1';
+      } else {
+        pagerInfo.innerHTML = 'Page ' + (currentPage + 1) + ' / ' + totalPages;
+      }
+    }
+
+    if (pagerPrev) {
+      pagerPrev.disabled = total === 0 || currentPage <= 0;
+    }
+    if (pagerNext) {
+      pagerNext.disabled = total === 0 || currentPage >= totalPages - 1;
+    }
+  }
+
+  function handlePagePrev(event) {
+    event = preventDefault(event);
+    setPage(currentPage - 1);
+    return false;
+  }
+
+  function handlePageNext(event) {
+    event = preventDefault(event);
+    setPage(currentPage + 1);
+    return false;
+  }
+
+  function setPage(index) {
+    var total = currentList.length;
+    if (total === 0) {
+      if (currentPage !== 0) {
+        currentPage = 0;
+        renderCallbacks();
+      }
+      return;
+    }
+    var totalPages = pageSize > 0 ? Math.ceil(total / pageSize) : 1;
+    if (index < 0) {
+      index = 0;
+    } else if (index > totalPages - 1) {
+      index = totalPages - 1;
+    }
+    if (index !== currentPage) {
+      currentPage = index;
+      renderCallbacks();
     }
   }
 
@@ -628,6 +710,7 @@
   }
 
   function runFilters() {
+    var previousPage = currentPage;
     var phoneFilter = trimValue(activeFilters.phone).replace(/\D/g, '');
     var reasonFilter = trimValue(activeFilters.reason).toLowerCase();
     var callFilter = trimValue(activeFilters.callStatus).toLowerCase();
@@ -713,6 +796,16 @@
     }
 
     currentList = list;
+    var totalPages = pageSize > 0 ? Math.ceil(list.length / pageSize) : 1;
+    if (list.length === 0) {
+      currentPage = 0;
+    } else if (previousPage >= totalPages) {
+      currentPage = totalPages - 1;
+    } else if (previousPage < 0) {
+      currentPage = 0;
+    } else {
+      currentPage = previousPage;
+    }
     renderCallbacks();
   }
 
@@ -965,6 +1058,7 @@
       activeFilters.agent = trimValue(filterAgentSelect.value);
     }
     activeFilters.skills = selectedSkills.slice(0);
+    currentPage = 0;
     runFilters();
     closeFilterModal();
     return false;
@@ -975,6 +1069,7 @@
     resetActiveFilters();
     selectedSkills = [];
     populateFilterFormFromState();
+    currentPage = 0;
     runFilters();
     return false;
   }

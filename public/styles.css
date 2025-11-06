@@ -346,6 +346,11 @@ body {
   color: #5d2cff;
 }
 
+.pager-button[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .pager-button {
   margin-right: 12px;
 }
