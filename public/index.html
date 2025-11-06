@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Callback List</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-nav">
+        <div class="brand">
+          <div class="brand-logo">V</div>
+          <span class="brand-name">Voxtron</span>
+        </div>
+        <nav class="main-nav" aria-label="primary">
+          <button class="tab-button active">Callback List <span class="badge">24</span></button>
+          <button class="tab-button">Reports</button>
+          <button class="tab-button">Analytics</button>
+          <button class="tab-button">Profile</button>
+          <button class="tab-button">Settings</button>
+        </nav>
+        <div class="user-status">
+          <span class="status-dot online"></span>
+          <span class="status-text">Connected</span>
+          <div class="user-chip">
+            <span class="user-initials">JD</span>
+            <div class="user-meta">
+              <span class="user-name">John Doe</span>
+              <span class="user-role">Agent-001</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page">
+        <div class="page-head">
+          <div class="page-title">
+            <div class="icon-circle">
+              <span class="phone-icon">☎</span>
+            </div>
+            <div>
+              <h1>Callback List</h1>
+              <p>Manage and track customer callback requests with real-time status updates</p>
+            </div>
+          </div>
+          <div class="status-pills">
+            <span class="pill waiting">2 Waiting</span>
+            <span class="pill calling">2 Calling</span>
+          </div>
+        </div>
+
+          <section class="toolbar">
+            <button class="filter-button" id="open-filter" type="button">
+            <span class="filter-icon">☰</span>
+            Filters
+          </button>
+          <div class="filter-summary" id="filter-summary"></div>
+          <div class="toolbar-spacer"></div>
+          <div class="pill-group">
+            <span class="pill muted">Skills: 3</span>
+            <span class="pill muted">1</span>
+          </div>
+          <button class="clear-button" type="button">Clear</button>
+        </section>
+
+        <section class="list-meta">
+          <span id="results-range">0 results</span>
+          <div class="pager">
+            <button class="pager-button" id="pager-prev" type="button">◀</button>
+            <span id="pager-info">Page 1 / 1</span>
+            <button class="pager-button" id="pager-next" type="button">▶</button>
+          </div>
+        </section>
+
+        <section class="table-card" aria-live="polite">
+          <table id="callbacks-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Time</th>
+                <th>Phone</th>
+                <th>Last Status</th>
+                <th>Skill</th>
+                <th>Agent</th>
+                <th>Waiting</th>
+                <th>Abandon Time</th>
+                <th>Callback Time</th>
+                <th>Conversation</th>
+                <th>KPI</th>
+                <th>Reason &amp; Notes</th>
+                <th>Call Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="callbacks-body"></tbody>
+          </table>
+        </section>
+
+        <div id="filter-backdrop" class="modal-backdrop hidden"></div>
+        <div
+          id="filter-modal"
+          class="modal hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="filter-modal-title"
+        >
+          <div class="modal-content filter-modal">
+            <h2 id="filter-modal-title">Filters</h2>
+            <form id="filter-form">
+              <section class="filter-section">
+                <h3 class="filter-title">Search</h3>
+                <div class="filter-row">
+                  <div class="filter-field">
+                    <label for="filter-phone">Phone</label>
+                    <input
+                      type="text"
+                      id="filter-phone"
+                      class="modal-input"
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                  <div class="filter-field">
+                    <label for="filter-reason">Reason &amp; Notes</label>
+                    <input
+                      type="text"
+                      id="filter-reason"
+                      class="modal-input"
+                      placeholder="Search by reason or notes"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section class="filter-section">
+                <h3 class="filter-title">Time Filter</h3>
+                <div class="filter-field">
+                  <label for="filter-from-date">From</label>
+                  <div class="filter-date-row">
+                    <div class="filter-date-field">
+                      <input
+                        type="text"
+                        id="filter-from-date"
+                        class="modal-input filter-date-input"
+                        placeholder="Select date"
+                        readonly="readonly"
+                      />
+                      <button
+                        type="button"
+                        class="calendar-trigger"
+                        data-target="filter-from-date"
+                      >
+                        Pick
+                      </button>
+                    </div>
+                    <div class="filter-time-field">
+                      <select id="filter-from-hour" class="modal-input filter-time-select">
+                        <option value="">HH</option>
+                      </select>
+                      <span class="time-separator">:</span>
+                      <select id="filter-from-minute" class="modal-input filter-time-select">
+                        <option value="">MM</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="filter-field">
+                  <label for="filter-to-date">To</label>
+                  <div class="filter-date-row">
+                    <div class="filter-date-field">
+                      <input
+                        type="text"
+                        id="filter-to-date"
+                        class="modal-input filter-date-input"
+                        placeholder="Select date"
+                        readonly="readonly"
+                      />
+                      <button
+                        type="button"
+                        class="calendar-trigger"
+                        data-target="filter-to-date"
+                      >
+                        Pick
+                      </button>
+                    </div>
+                    <div class="filter-time-field">
+                      <select id="filter-to-hour" class="modal-input filter-time-select">
+                        <option value="">HH</option>
+                      </select>
+                      <span class="time-separator">:</span>
+                      <select id="filter-to-minute" class="modal-input filter-time-select">
+                        <option value="">MM</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="filter-section">
+                <h3 class="filter-title">Status</h3>
+                <div class="filter-row">
+                  <div class="filter-field">
+                    <label for="filter-call-status">Call Status</label>
+                    <select id="filter-call-status" class="modal-input">
+                      <option value="">All call status</option>
+                    </select>
+                  </div>
+                  <div class="filter-field">
+                    <label for="filter-last-status">Last Status</label>
+                    <select id="filter-last-status" class="modal-input">
+                      <option value="">All last status</option>
+                      <option value="Callback">Callback</option>
+                      <option value="Abandon">Abandon</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              <section class="filter-section">
+                <h3 class="filter-title">Assignment</h3>
+                <div class="filter-row">
+                  <div class="filter-field">
+                    <label for="filter-skills-trigger">Skills</label>
+                    <div class="multi-select" id="filter-skills">
+                      <button type="button" id="filter-skills-trigger" class="multi-select-trigger">
+                        All skills
+                      </button>
+                      <div id="filter-skills-panel" class="multi-select-panel hidden"></div>
+                    </div>
+                  </div>
+                  <div class="filter-field">
+                    <label for="filter-agent">Agent</label>
+                    <select id="filter-agent" class="modal-input">
+                      <option value="">All agents</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              <div class="filter-actions">
+                <button type="button" id="filter-clear" class="modal-button secondary">Reset</button>
+                <button type="submit" class="modal-button primary">Apply</button>
+              </div>
+            </form>
+
+            <div id="filter-calendar" class="calendar hidden" aria-hidden="true">
+              <div class="calendar-header">
+                <button type="button" id="calendar-prev" class="calendar-nav">◀</button>
+                <div id="calendar-label" class="calendar-label"></div>
+                <button type="button" id="calendar-next" class="calendar-nav">▶</button>
+              </div>
+              <table class="calendar-table" role="presentation">
+                <thead>
+                  <tr>
+                    <th>Su</th>
+                    <th>Mo</th>
+                    <th>Tu</th>
+                    <th>We</th>
+                    <th>Th</th>
+                    <th>Fr</th>
+                    <th>Sa</th>
+                  </tr>
+                </thead>
+                <tbody id="calendar-grid"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="note-backdrop" class="modal-backdrop hidden"></div>
+        <div
+          id="note-modal"
+          class="modal hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="note-modal-title"
+        >
+          <div class="modal-content">
+            <h2 id="note-modal-title">Update Reason &amp; Notes</h2>
+            <form id="note-form">
+              <label class="modal-label" for="note-reason">Reason</label>
+              <select id="note-reason" name="note-reason" class="modal-input">
+                <option value="">Select a reason</option>
+                <option value="followup">Follow-up</option>
+                <option value="billing">Billing Question</option>
+                <option value="escalation">Escalation</option>
+                <option value="technical">Technical Support</option>
+                <option value="other">Other</option>
+              </select>
+              <div id="note-error" class="modal-error"></div>
+
+              <label class="modal-label" for="note-text">Notes</label>
+              <textarea
+                id="note-text"
+                name="note-text"
+                class="modal-textarea"
+                maxlength="250"
+                rows="4"
+                placeholder="Add up to 250 characters"
+              ></textarea>
+              <div class="char-counter" id="note-counter">0 / 250</div>
+
+              <div class="modal-actions">
+                <button type="button" id="note-cancel" class="modal-button secondary">Cancel</button>
+                <button type="submit" id="note-save" class="modal-button primary">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
